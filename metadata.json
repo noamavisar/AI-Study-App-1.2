@@ -1,0 +1,5 @@
+{
+  "name": "ADHD version of Study Sprint AI",
+  "description": "An application to help students organize their study sprints before tests, combining a task manager with AI-powered tools, tips, and optimization ideas to learn better and faster.",
+  "requestFramePermissions": []
+}
