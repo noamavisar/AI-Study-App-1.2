@@ -119,7 +119,7 @@ export async function importFromGoogleSheet(sheetUrl: string, sheetName: string)
 
     importedTasks.push({
       title,
-      description: 'Imported from Google Sheets.',
+      description: `Imported from ${sheetName}`,
       priority,
       status,
       estimatedTime: 30, // Default estimated time

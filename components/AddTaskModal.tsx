@@ -62,13 +62,23 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAddTask }) => {
             </div>
             <div>
               <label htmlFor="dueDate" className="block text-sm font-medium text-slate-600 dark:text-slate-300">Due Date</label>
-              <input
-                type="date"
-                id="dueDate"
-                value={dueDate}
-                onChange={e => setDueDate(e.target.value)}
-                className="mt-1 block w-full bg-white dark:bg-slate-900 border border-jam-border dark:border-slate-600 rounded-md shadow-sm py-2 px-3 text-jam-dark dark:text-slate-200 focus:outline-none focus:ring-jam-blue dark:focus:ring-pink-500 focus:border-jam-blue dark:focus:border-pink-500 sm:text-sm"
-              />
+               <div className="relative mt-1">
+                 <input
+                    type="date"
+                    id="dueDate"
+                    value={dueDate}
+                    onChange={e => setDueDate(e.target.value)}
+                    className={`block w-full bg-white dark:bg-slate-900 border border-jam-border dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-jam-blue dark:focus:ring-pink-500 focus:border-jam-blue dark:focus:border-pink-500 sm:text-sm ${
+                    dueDate ? 'text-jam-dark dark:text-slate-200' : 'text-slate-400'
+                    }`}
+                />
+                 <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 text-slate-400">
+                        <path d="M5.75 3.5a.75.75 0 0 0-1.5 0v1.5a.75.75 0 0 0 1.5 0V3.5ZM15.75 3.5a.75.75 0 0 0-1.5 0v1.5a.75.75 0 0 0 1.5 0V3.5Z" />
+                        <path fillRule="evenodd" d="M14.5 2a1.5 1.5 0 0 1 1.5 1.5v1.5a.75.75 0 0 1-1.5 0V5h-11v.5a.75.75 0 0 1-1.5 0V3.5A1.5 1.5 0 0 1 5.5 2h9ZM2 8.5a.5.5 0 0 1 .5-.5h15a.5.5 0 0 1 .5.5v7.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 2 16.5v-8Z" clipRule="evenodd" />
+                    </svg>
+                 </div>
+              </div>
             </div>
         </div>
         <div>

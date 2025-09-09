@@ -11,7 +11,7 @@ interface ImportFromSheetModalProps {
 
 const ImportFromSheetModal: React.FC<ImportFromSheetModalProps> = ({ isOpen, onClose, onImport }) => {
   const [sheetUrl, setSheetUrl] = useState('');
-  const [sheetName, setSheetName] = useState('');
+  const [sheetName, setSheetName] = useState('Sheet1');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
