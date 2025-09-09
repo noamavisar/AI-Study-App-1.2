@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import Header from './components/Header';
@@ -95,7 +94,6 @@ const App: React.FC = () => {
   // Flashcards state
   const [currentFlashcards, setCurrentFlashcards] = useState<Flashcard[]>([]);
   const [generatedFlashcards, setGeneratedFlashcards] = useState<Flashcard[]>([]);
-  // FIX: Added state to store the topic for generated flashcards, making it available when saving them as a task.
   const [flashcardTopic, setFlashcardTopic] = useState('');
 
 
@@ -153,18 +151,17 @@ const App: React.FC = () => {
   };
   
   const handleDeleteProject = (projectId: string) => {
-    setProjects(prevProjects => {
-      const projectToDelete = prevProjects.find(p => p.id === projectId);
-      if (!projectToDelete || prevProjects.length <= 1) {
-        if (prevProjects.length <= 1) alert("You cannot delete the only project.");
-        return prevProjects;
-      }
-      
-      if (window.confirm(`Are you sure you want to delete the "${projectToDelete.name}" project? This cannot be undone.`)) {
-        return prevProjects.filter(p => p.id !== projectId);
-      }
-      return prevProjects;
-    });
+    const projectToDelete = projects.find(p => p.id === projectId);
+    if (!projectToDelete) return;
+    
+    if (projects.length <= 1) {
+        alert("You cannot delete the only project.");
+        return;
+    }
+    
+    if (window.confirm(`Are you sure you want to delete the "${projectToDelete.name}" project? This cannot be undone.`)) {
+        setProjects(prevProjects => prevProjects.filter(p => p.id !== projectId));
+    }
   };
 
   const handleImportProject = (projectData: Omit<Project, 'id'>) => {
@@ -312,7 +309,6 @@ const App: React.FC = () => {
     setAiIsLoading(true);
     try {
         const flashcards = await generateFlashcards(topic, files, linkFiles);
-        // FIX: Store the topic in state so it can be used when saving the task.
         setFlashcardTopic(topic);
         setGeneratedFlashcards(flashcards);
         setCurrentFlashcards(flashcards);
@@ -329,7 +325,6 @@ const App: React.FC = () => {
   const handleSaveFlashcardsAsTask = () => {
     if (!activeProject || generatedFlashcards.length === 0) return;
     const newTask: Omit<Task, 'id' | 'status'> = {
-        // FIX: Use the `flashcardTopic` from state instead of the out-of-scope `topic` variable.
         title: `Study: Flashcards for ${flashcardTopic}`,
         description: 'Review the generated flashcards to master the key concepts.',
         priority: Priority.ImportantNotUrgent,
@@ -339,7 +334,6 @@ const App: React.FC = () => {
     handleAddTask(newTask);
     setIsFlashcardsModalOpen(false);
     setGeneratedFlashcards([]);
-    // FIX: Reset the flashcard topic after saving.
     setFlashcardTopic('');
   };
 
