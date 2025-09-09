@@ -27,9 +27,9 @@ export const PRIORITY_DESCRIPTIONS: { [key in Priority]: string } = {
 };
 
 export const STATUS_COLORS: { [key in TaskStatus]: { bg: string; text: string; } } = {
-  [TaskStatus.ToDo]: { bg: 'bg-jam-orange-light dark:bg-slate-800', text: 'text-jam-dark dark:text-slate-300' },
-  [TaskStatus.InProgress]: { bg: 'bg-jam-green-light dark:bg-slate-800', text: 'text-jam-dark dark:text-slate-300' },
-  [TaskStatus.Done]: { bg: 'bg-jam-blue-light dark:bg-slate-800', text: 'text-jam-dark dark:text-slate-300' },
+  [TaskStatus.ToDo]:       { bg: 'bg-jam-orange-light dark:bg-red-900/20',       text: 'text-jam-dark dark:text-red-300' },
+  [TaskStatus.InProgress]: { bg: 'bg-jam-green-light dark:bg-green-900/20',     text: 'text-jam-dark dark:text-green-300' },
+  [TaskStatus.Done]:       { bg: 'bg-jam-blue-light dark:bg-blue-900/20',      text: 'text-jam-dark dark:text-blue-300' },
 };
 
 export const PRIORITY_COLORS: { [key in Priority]: { bg: string; text: string; tagBg: string; tagText: string; border: string; } } = {

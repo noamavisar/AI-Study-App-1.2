@@ -7,7 +7,7 @@ interface BrainDumpProps {
 
 const BrainDump: React.FC<BrainDumpProps> = ({ notes, onNotesChange }) => {
     return (
-        <div className="p-4 rounded-lg shadow-lg border border-jam-border dark:border-slate-800 bg-jam-light-gray/80 dark:bg-slate-900/80 backdrop-blur-sm">
+        <div className="p-4 rounded-lg shadow-lg border border-jam-border dark:border-slate-700 bg-jam-light-gray/80 dark:bg-slate-800/50 backdrop-blur-sm">
             <h3 className="font-semibold text-jam-dark dark:text-slate-200 mb-2 flex items-center">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 mr-2 text-jam-orange dark:text-orange-400">
                      <path d="M10 3.75a.75.75 0 0 1 .75.75v1.5h1.5a.75.75 0 0 1 0 1.5h-1.5v1.5a.75.75 0 0 1-1.5 0v-1.5h-1.5a.75.75 0 0 1 0-1.5h1.5v-1.5a.75.75 0 0 1 .75-.75Z" />
