@@ -144,7 +144,6 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ isOpen, onClose, projec
                         onKeyDown={handleKeyDown}
                         className="flex-grow bg-white dark:bg-slate-700 border border-jam-border dark:border-slate-600 rounded-md shadow-sm py-1 px-2 text-sm text-jam-dark dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-jam-blue dark:focus:ring-pink-500"
                         autoFocus
-                        onBlur={handleCancelEdit}
                         />
                     ) : (
                         <p className="text-sm font-medium text-jam-dark dark:text-slate-200 truncate">{project.name}</p>
