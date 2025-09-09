@@ -81,6 +81,10 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onDeleteTask, onAddSubtask, o
     setIsEditingPriority(false);
   };
 
+  const handleDeleteClick = () => {
+    onDeleteTask(task.id);
+  };
+
   const completedSubtasks = (task.subtasks || []).filter(s => s.completed).length;
   const totalSubtasks = (task.subtasks || []).length;
   const progress = totalSubtasks > 0 ? (completedSubtasks / totalSubtasks) * 100 : 0;
@@ -97,7 +101,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onDeleteTask, onAddSubtask, o
           {task.day && <p className="text-xs font-bold uppercase tracking-wider text-jam-blue dark:text-pink-400 mb-1">Day {task.day}</p>}
           <h3 className={`font-bold text-md mb-2 ${priorityConfig.text}`}>{task.title}</h3>
         </div>
-        <button onClick={() => onDeleteTask(task.id)} className="text-slate-400 hover:text-red-500 transition-colors flex-shrink-0 ml-2">
+        <button onClick={handleDeleteClick} className="text-slate-400 hover:text-red-500 transition-colors flex-shrink-0 ml-2">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
         </button>
       </div>
