@@ -1,3 +1,4 @@
+// This file defines the core data structures used throughout the application.
 
 export enum TaskStatus {
   ToDo = 'To Do',
@@ -18,16 +19,15 @@ export enum ResourceType {
   OldTest = 'Old Test',
 }
 
-export interface LearningResource {
-  id: string;
-  file: File;
-  type: ResourceType;
-}
-
 export interface Subtask {
   id: string;
   text: string;
   completed: boolean;
+}
+
+export interface Flashcard {
+  question: string;
+  answer: string;
 }
 
 export interface Task {
@@ -37,16 +37,35 @@ export interface Task {
   status: TaskStatus;
   priority: Priority;
   estimatedTime: number; // in minutes
-  day?: number; // Optional day for study plan
+  dueDate?: string; // e.g., '2024-12-31'
   subtasks?: Subtask[];
   flashcards?: Flashcard[];
+  day?: number; // for study sprints
 }
 
-export interface Flashcard {
-  question: string;
-  answer: string;
+// This is for in-memory representation while user is uploading files for AI processing.
+// These are not persisted in local storage.
+export interface LearningResource {
+    id: string;
+    file: File;
+    type: ResourceType;
 }
 
-export type AIAssistantMode = 'breakdown' | 'tips';
+export interface TimerSettings {
+    pomodoro: number;
+    shortBreak: number;
+    longBreak: number;
+}
 
-export type Theme = 'light' | 'dark';
+export interface Project {
+  id: string;
+  name: string;
+  tasks: Task[];
+  timerSettings: TimerSettings;
+  pomodoros: number;
+  brainDump: string;
+  // Note: We don't persist learning resources with File objects across sessions.
+  // This app is designed for session-based AI interactions.
+}
+
+export type AIAssistantMode = 'breakdown' | 'tips' | 'first-step';

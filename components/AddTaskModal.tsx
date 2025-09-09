@@ -13,11 +13,12 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAddTask }) => {
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<Priority>(Priority.ImportantNotUrgent);
   const [estimatedTime, setEstimatedTime] = useState(30);
+  const [dueDate, setDueDate] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    onAddTask({ title, description, priority, estimatedTime });
+    onAddTask({ title, description, priority, estimatedTime, dueDate: dueDate || undefined });
   };
 
   return (
@@ -44,19 +45,31 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAddTask }) => {
             className="mt-1 block w-full bg-white dark:bg-slate-900 border border-jam-border dark:border-slate-600 rounded-md shadow-sm py-2 px-3 text-jam-dark dark:text-slate-200 focus:outline-none focus:ring-jam-blue dark:focus:ring-pink-500 focus:border-jam-blue dark:focus:border-pink-500 sm:text-sm"
           />
         </div>
-        <div>
-          <label htmlFor="priority" className="block text-sm font-medium text-slate-600 dark:text-slate-300">Priority</label>
-          <select
-            id="priority"
-            value={priority}
-            onChange={e => setPriority(e.target.value as Priority)}
-            className="mt-1 block w-full bg-white dark:bg-slate-900 border border-jam-border dark:border-slate-600 rounded-md shadow-sm py-2 px-3 text-jam-dark dark:text-slate-200 focus:outline-none focus:ring-jam-blue dark:focus:ring-pink-500 focus:border-jam-blue dark:focus:border-pink-500 sm:text-sm"
-          >
-            {PRIORITIES.map(p => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{PRIORITY_DESCRIPTIONS[priority]}</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="priority" className="block text-sm font-medium text-slate-600 dark:text-slate-300">Priority</label>
+              <select
+                id="priority"
+                value={priority}
+                onChange={e => setPriority(e.target.value as Priority)}
+                className="mt-1 block w-full bg-white dark:bg-slate-900 border border-jam-border dark:border-slate-600 rounded-md shadow-sm py-2 px-3 text-jam-dark dark:text-slate-200 focus:outline-none focus:ring-jam-blue dark:focus:ring-pink-500 focus:border-jam-blue dark:focus:border-pink-500 sm:text-sm"
+              >
+                {PRIORITIES.map(p => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 h-8">{PRIORITY_DESCRIPTIONS[priority]}</p>
+            </div>
+            <div>
+              <label htmlFor="dueDate" className="block text-sm font-medium text-slate-600 dark:text-slate-300">Due Date</label>
+              <input
+                type="date"
+                id="dueDate"
+                value={dueDate}
+                onChange={e => setDueDate(e.target.value)}
+                className="mt-1 block w-full bg-white dark:bg-slate-900 border border-jam-border dark:border-slate-600 rounded-md shadow-sm py-2 px-3 text-jam-dark dark:text-slate-200 focus:outline-none focus:ring-jam-blue dark:focus:ring-pink-500 focus:border-jam-blue dark:focus:border-pink-500 sm:text-sm"
+              />
+            </div>
         </div>
         <div>
           <label htmlFor="estimatedTime" className="block text-sm font-medium text-slate-600 dark:text-slate-300">Estimated Time (minutes)</label>

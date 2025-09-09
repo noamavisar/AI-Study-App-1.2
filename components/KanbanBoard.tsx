@@ -11,6 +11,7 @@ interface KanbanBoardProps {
   onToggleSubtask: (taskId: string, subtaskId: string) => void;
   onUpdateTaskTime: (taskId: string, newTime: number) => void;
   onUpdateTaskPriority: (taskId: string, newPriority: Priority) => void;
+  onUpdateTaskDueDate: (taskId: string, newDueDate: string) => void;
   onOpenAIAssistant: (mode: AIAssistantMode, task: Task) => void;
   onOpenFlashcardTask: (flashcards: Flashcard[]) => void;
 }

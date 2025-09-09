@@ -1,56 +1,36 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
 type TimerMode = 'pomodoro' | 'shortBreak' | 'longBreak';
-interface TimerSettings {
+
+export interface TimerSettings {
     pomodoro: number;
     shortBreak: number;
     longBreak: number;
 }
 
-const Timer: React.FC = () => {
-  const [settings, setSettings] = useState<TimerSettings>({
-    pomodoro: 25,
-    shortBreak: 5,
-    longBreak: 15,
-  });
+interface TimerProps {
+    settings: TimerSettings;
+    pomodoros: number;
+    onSettingsChange: (newSettings: TimerSettings) => void;
+    onPomodorosChange: (newCount: number) => void;
+}
+
+const Timer: React.FC<TimerProps> = ({ settings, pomodoros, onSettingsChange, onPomodorosChange }) => {
   const [tempSettings, setTempSettings] = useState<TimerSettings>(settings);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const [mode, setMode] = useState<TimerMode>('pomodoro');
   const [time, setTime] = useState(settings.pomodoro * 60);
   const [isActive, setIsActive] = useState(false);
-  const [pomodoros, setPomodoros] = useState(() => {
-    try {
-      const saved = localStorage.getItem('studySprintPomodoros');
-      return saved ? JSON.parse(saved) : 0;
-    } catch {
-      return 0;
-    }
-  });
 
   useEffect(() => {
-    try {
-        const savedSettings = localStorage.getItem('studySprintTimerSettings');
-        if (savedSettings) {
-            const parsed = JSON.parse(savedSettings);
-            setSettings(parsed);
-            setTempSettings(parsed);
-            if (!isActive) {
-               setTime(parsed[mode] * 60);
-            }
-        }
-    } catch (error) {
-        console.error("Failed to load timer settings from local storage", error);
+    // Sync local state when props change (e.g., project switch)
+    setTempSettings(settings);
+    if (!isActive) {
+      setTime(settings[mode] * 60);
     }
-  }, [isActive, mode]);
+  }, [settings, mode, isActive]);
 
-  useEffect(() => {
-    try {
-        localStorage.setItem('studySprintPomodoros', JSON.stringify(pomodoros));
-    } catch (error) {
-        console.error("Failed to save pomodoros", error);
-    }
-  }, [pomodoros]);
 
   const switchMode = useCallback((newMode: TimerMode) => {
     setIsActive(false);
@@ -67,7 +47,7 @@ const Timer: React.FC = () => {
     } else if (isActive && time === 0) {
       if (mode === 'pomodoro') {
         const newPomodoroCount = pomodoros + 1;
-        setPomodoros(newPomodoroCount);
+        onPomodorosChange(newPomodoroCount);
         if (newPomodoroCount % 4 === 0) {
           switchMode('longBreak');
         } else {
@@ -80,7 +60,7 @@ const Timer: React.FC = () => {
     return () => {
       if (interval) window.clearInterval(interval);
     };
-  }, [isActive, time, mode, pomodoros, switchMode]);
+  }, [isActive, time, mode, pomodoros, switchMode, onPomodorosChange]);
 
   const toggleTimer = () => setIsActive(!isActive);
 
@@ -101,8 +81,7 @@ const Timer: React.FC = () => {
   };
 
   const handleSaveSettings = () => {
-    setSettings(tempSettings);
-    localStorage.setItem('studySprintTimerSettings', JSON.stringify(tempSettings));
+    onSettingsChange(tempSettings);
     setIsSettingsOpen(false);
     if (!isActive) {
         setTime(tempSettings[mode] * 60);
@@ -202,7 +181,7 @@ const Timer: React.FC = () => {
             <span>Completed: {pomodoros}</span>
             {pomodoros > 0 && (
                 <button 
-                    onClick={() => { if(window.confirm('Are you sure you want to reset your pomodoro count?')) setPomodoros(0) }} 
+                    onClick={() => { if(window.confirm('Are you sure you want to reset your pomodoro count for this project?')) onPomodorosChange(0) }} 
                     className="text-slate-400 hover:text-jam-dark dark:hover:text-slate-200 transition-colors" 
                     title="Reset count"
                 >

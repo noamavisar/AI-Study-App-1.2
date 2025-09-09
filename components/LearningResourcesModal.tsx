@@ -1,142 +1,130 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import Modal from './Modal';
 import { LearningResource, ResourceType } from '../types';
 import { RESOURCE_TYPES } from '../constants';
+import { formatBytes, getFileIcon } from '../utils/fileUtils';
 
 interface LearningResourcesModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onGenerateSprint: (resources: Omit<LearningResource, 'id'>[], days: number) => void;
+  onGenerate: (resources: Omit<LearningResource, 'id'>[], days: number) => void;
   isLoading: boolean;
 }
 
-const LearningResourcesModal: React.FC<LearningResourcesModalProps> = ({ isOpen, onClose, onGenerateSprint, isLoading }) => {
-  const [resources, setResources] = useState<Omit<LearningResource, 'id'>[]>([]);
-  const [sprintDays, setSprintDays] = useState<number>(7);
-  const [isDragging, setIsDragging] = useState(false);
+const LearningResourcesModal: React.FC<LearningResourcesModalProps> = ({ isOpen, onClose, onGenerate, isLoading }) => {
+  const [resources, setResources] = useState<LearningResource[]>([]);
+  const [days, setDays] = useState(7);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = (files: FileList | null) => {
-    if (!files) return;
-    const newResources = Array.from(files).map(file => ({
-      file,
-      type: ResourceType.LearningMaterial // Default type
-    }));
-    setResources(prev => [...prev, ...newResources]);
-  };
-
-  const handleDragEnter = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-  };
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-  };
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-    handleFileChange(e.dataTransfer.files);
-  };
-
-
-  const handleResourceTypeChange = (index: number, type: ResourceType) => {
-    setResources(prev => prev.map((res, i) => i === index ? { ...res, type } : res));
-  };
-
-  const handleRemoveResource = (index: number) => {
-    setResources(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handleSubmit = () => {
-    if (resources.length > 0 && sprintDays > 0) {
-      onGenerateSprint(resources, sprintDays);
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length > 0) {
+        const newResources: LearningResource[] = files.map(file => ({
+            id: `${file.name}-${file.lastModified}`,
+            file,
+            type: ResourceType.LearningMaterial, // default type
+        }));
+        setResources(prev => [...prev, ...newResources]);
     }
+    // Reset file input
+    if(fileInputRef.current) fileInputRef.current.value = "";
   };
   
-  const formatBytes = (bytes: number, decimals = 2) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const dm = decimals < 0 ? 0 : decimals;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+  const updateResourceType = (id: string, type: ResourceType) => {
+    setResources(prev => prev.map(r => r.id === id ? { ...r, type } : r));
+  };
+
+  const removeResource = (id: string) => {
+    setResources(prev => prev.filter(r => r.id !== id));
+  };
+
+  const handleGenerate = () => {
+    if (resources.length === 0) {
+      setError('Please upload at least one learning resource.');
+      return;
+    }
+    if (days < 1) {
+      setError('Number of days must be at least 1.');
+      return;
+    }
+    setError(null);
+    onGenerate(resources, days);
+  };
+  
+  const handleClose = () => {
+      setResources([]);
+      setError(null);
+      setDays(7);
+      onClose();
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Plan Sprint with AI">
+    <Modal isOpen={isOpen} onClose={handleClose} title="Generate Study Sprint with AI">
       <div className="space-y-4">
+        <p className="text-sm text-slate-600 dark:text-slate-300">
+          Upload your course materials (PDFs, notes, images) and let the AI create a personalized study plan for you.
+        </p>
+
         <div>
-          <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">Upload Your Learning Materials</label>
-          <div
-            onDragEnter={handleDragEnter}
-            onDragLeave={handleDragLeave}
-            onDragOver={handleDragOver}
-            onDrop={handleDrop}
-            className={`relative block w-full border-2 ${isDragging ? 'border-jam-blue dark:border-pink-500' : 'border-jam-border dark:border-slate-600'} border-dashed rounded-lg p-6 text-center hover:border-jam-blue/80 dark:hover:border-pink-500/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-jam-blue dark:focus:ring-pink-500 transition-colors`}
-          >
-             <svg className="mx-auto h-12 w-12 text-slate-400 dark:text-slate-500" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
-                <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <span className="mt-2 block text-sm font-semibold text-slate-600 dark:text-slate-300">Drag & drop files or click to upload</span>
-            <p className="text-xs text-slate-500 dark:text-slate-400">PDF, PPTX, DOCX</p>
-            <input 
-              type="file" 
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
-              onChange={e => handleFileChange(e.target.files)}
-              multiple
-              accept=".pdf,.pptx,.docx,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            <label htmlFor="sprint-days" className="block text-sm font-medium text-slate-600 dark:text-slate-300">Days until exam</label>
+            <input
+                type="number"
+                id="sprint-days"
+                value={days}
+                onChange={e => setDays(parseInt(e.target.value, 10) || 1)}
+                min="1"
+                className="mt-1 block w-24 bg-white dark:bg-slate-900 border border-jam-border dark:border-slate-600 rounded-md shadow-sm py-2 px-3 text-jam-dark dark:text-slate-200 focus:outline-none focus:ring-jam-blue dark:focus:ring-pink-500 sm:text-sm"
             />
-          </div>
+        </div>
+
+        <div>
+            <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">Learning Resources</label>
+            <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-jam-border dark:border-slate-600 border-dashed rounded-md">
+                <div className="space-y-1 text-center">
+                    <svg className="mx-auto h-12 w-12 text-slate-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                        <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <div className="flex text-sm text-slate-600 dark:text-slate-400">
+                        <label htmlFor="file-upload" className="relative cursor-pointer bg-white dark:bg-slate-800 rounded-md font-medium text-jam-blue dark:text-pink-500 hover:text-jam-dark dark:hover:text-pink-400 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-jam-blue">
+                            <span>Upload files</span>
+                            <input id="file-upload" name="file-upload" type="file" className="sr-only" multiple onChange={handleFileChange} ref={fileInputRef}/>
+                        </label>
+                        <p className="pl-1">or drag and drop</p>
+                    </div>
+                    <p className="text-xs text-slate-500">PDF, PNG, JPG, TXT up to 10MB</p>
+                </div>
+            </div>
         </div>
 
         {resources.length > 0 && (
-          <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
-            {resources.map((resource, index) => (
-              <div key={index} className="flex items-center justify-between bg-white dark:bg-slate-900/50 p-2 rounded-md border border-jam-border dark:border-slate-700">
-                <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-jam-dark dark:text-slate-200 truncate">{resource.file.name}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">{formatBytes(resource.file.size)}</p>
-                </div>
-                <div className="flex items-center space-x-2 ml-2">
-                  <select
-                    value={resource.type}
-                    onChange={e => handleResourceTypeChange(index, e.target.value as ResourceType)}
-                    className="bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-md shadow-sm py-1 px-2 text-xs text-jam-dark dark:text-slate-200 focus:outline-none focus:ring-jam-blue dark:focus:ring-pink-500 focus:border-jam-blue dark:focus:border-pink-500"
-                  >
-                    {RESOURCE_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
-                  </select>
-                  <button onClick={() => handleRemoveResource(index)} className="text-slate-400 hover:text-red-500">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM8.28 7.22a.75.75 0 0 0-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 1 0 1.06 1.06L10 11.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L11.06 10l1.72-1.72a.75.75 0 0 0-1.06-1.06L10 8.94 8.28 7.22Z" clipRule="evenodd" /></svg>
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                {resources.map(resource => (
+                    <div key={resource.id} className="flex items-center justify-between p-2 bg-slate-100 dark:bg-slate-900/50 rounded-md">
+                       <div className="flex items-center space-x-3 truncate">
+                           <span className="text-xl">{getFileIcon(resource.file.type)}</span>
+                           <div className="truncate">
+                            <p className="text-sm font-medium text-jam-dark dark:text-slate-200 truncate" title={resource.file.name}>{resource.file.name}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">{formatBytes(resource.file.size)}</p>
+                           </div>
+                       </div>
+                       <div className="flex items-center space-x-2">
+                           <select value={resource.type} onChange={e => updateResourceType(resource.id, e.target.value as ResourceType)} className="bg-white dark:bg-slate-800 border border-jam-border dark:border-slate-600 rounded-md py-1 px-2 text-xs text-jam-dark dark:text-slate-200 focus:ring-jam-blue dark:focus:ring-pink-500">
+                               {RESOURCE_TYPES.map(rt => <option key={rt} value={rt}>{rt}</option>)}
+                           </select>
+                           <button onClick={() => removeResource(resource.id)} className="text-slate-400 hover:text-red-500"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg></button>
+                       </div>
+                    </div>
+                ))}
+            </div>
         )}
 
-        <div>
-          <label htmlFor="sprint-days" className="block text-sm font-medium text-slate-600 dark:text-slate-300">Days Until Exam</label>
-          <input
-            type="number"
-            id="sprint-days"
-            value={sprintDays}
-            onChange={e => setSprintDays(parseInt(e.target.value, 10) || 1)}
-            min="1"
-            className="mt-1 block w-full bg-white dark:bg-slate-900 border border-jam-border dark:border-slate-600 rounded-md shadow-sm py-2 px-3 text-jam-dark dark:text-slate-200 focus:outline-none focus:ring-jam-blue dark:focus:ring-pink-500 focus:border-jam-blue dark:focus:border-pink-500 sm:text-sm"
-          />
-        </div>
-
+        {error && <p className="text-sm text-red-500 bg-red-500/10 p-2 rounded-md">{error}</p>}
+        
         <div className="flex justify-end pt-2">
-            <button 
-                onClick={handleSubmit} 
-                disabled={isLoading || resources.length === 0}
+            <button
+                onClick={handleGenerate}
+                disabled={isLoading}
                 className="w-full flex justify-center items-center px-4 py-2 text-sm font-medium text-white bg-jam-dark rounded-lg hover:bg-black dark:bg-pink-600 dark:hover:bg-pink-700 disabled:bg-slate-400 dark:disabled:bg-slate-600 disabled:cursor-not-allowed"
             >
                 {isLoading ? (
@@ -144,10 +132,9 @@ const LearningResourcesModal: React.FC<LearningResourcesModalProps> = ({ isOpen,
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                         Generating Plan...
                     </>
-                ) : 'Generate Study Plan'}
+                ) : 'Generate Study Sprint'}
             </button>
         </div>
-        {isLoading && <p className="text-xs text-center text-slate-500 dark:text-slate-400 mt-2">This may take a minute, especially with large files...</p>}
       </div>
     </Modal>
   );

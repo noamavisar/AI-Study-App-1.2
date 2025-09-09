@@ -11,12 +11,56 @@ interface KanbanColumnProps {
   onToggleSubtask: (taskId: string, subtaskId: string) => void;
   onUpdateTaskTime: (taskId: string, newTime: number) => void;
   onUpdateTaskPriority: (taskId: string, newPriority: Priority) => void;
+  onUpdateTaskDueDate: (taskId: string, newDueDate: string) => void;
   onOpenAIAssistant: (mode: AIAssistantMode, task: Task) => void;
   onOpenFlashcardTask: (flashcards: Flashcard[]) => void;
 }
 
+// Helper to determine if a date is in the future (and not today)
+const isUpcomingDate = (dueDateString?: string): boolean => {
+    if (!dueDateString) return false;
+    try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const parts = dueDateString.split('-').map(p => parseInt(p, 10));
+        const dueDate = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+        return dueDate > today;
+    } catch {
+        return false;
+    }
+};
+
+// A palette of distinct Tailwind CSS border colors for grouping tasks.
+// Excludes red and green which are used for overdue and today.
+const SHARED_DATE_COLORS = [
+  'border-t-blue-500',
+  'border-t-purple-500',
+  'border-t-indigo-500',
+  'border-t-pink-500',
+  'border-t-teal-500',
+  'border-t-cyan-500',
+  'border-t-amber-500',
+];
+
 const KanbanColumn: React.FC<KanbanColumnProps> = ({ status, tasks, ...props }) => {
   const statusConfig = STATUS_COLORS[status];
+
+  // Create a map of upcoming due dates to unique colors for grouping.
+  const upcomingDueDates = tasks
+    .filter(task => isUpcomingDate(task.dueDate))
+    .map(task => task.dueDate!);
+
+  const dateCounts = upcomingDueDates.reduce((acc, date) => {
+    acc[date] = (acc[date] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const sharedDates = Object.keys(dateCounts).filter(date => dateCounts[date] > 1);
+
+  const dateColorMap = new Map<string, string>();
+  sharedDates.forEach((date, index) => {
+    dateColorMap.set(date, SHARED_DATE_COLORS[index % SHARED_DATE_COLORS.length]);
+  });
 
   return (
     <div className={`rounded-lg p-4 ${statusConfig.bg} h-full`}>
@@ -33,6 +77,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({ status, tasks, ...props }) 
             <TaskCard 
               key={task.id}
               task={task}
+              sharedDateColor={task.dueDate ? dateColorMap.get(task.dueDate) : undefined}
               {...props}
             />
         ))}

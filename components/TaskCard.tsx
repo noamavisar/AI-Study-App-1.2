@@ -9,20 +9,58 @@ interface TaskCardProps {
   onToggleSubtask: (taskId: string, subtaskId: string) => void;
   onUpdateTaskTime: (taskId: string, newTime: number) => void;
   onUpdateTaskPriority: (taskId: string, newPriority: Priority) => void;
+  onUpdateTaskDueDate: (taskId: string, newDueDate: string) => void;
   onOpenAIAssistant: (mode: AIAssistantMode, task: Task) => void;
   onOpenFlashcardTask: (flashcards: Flashcard[]) => void;
+  sharedDateColor?: string;
 }
 
-const TaskCard: React.FC<TaskCardProps> = ({ task, onDeleteTask, onAddSubtask, onToggleSubtask, onUpdateTaskTime, onUpdateTaskPriority, onOpenAIAssistant, onOpenFlashcardTask }) => {
+const getDateStatus = (dueDateString?: string) => {
+    if (!dueDateString) {
+        return { status: null, display: null };
+    }
+    try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Input type="date" provides 'YYYY-MM-DD'. To avoid timezone issues,
+        // parse it as UTC by creating the date from parts.
+        const parts = dueDateString.split('-').map(p => parseInt(p, 10));
+        const dueDate = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+
+        const formattedDate = dueDate.toLocaleDateString(undefined, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            timeZone: 'UTC',
+        });
+
+        if (dueDate < today) {
+            return { status: 'overdue', display: formattedDate };
+        }
+        if (dueDate.getTime() === today.getTime()) {
+            return { status: 'today', display: formattedDate };
+        }
+        return { status: 'upcoming', display: formattedDate };
+    } catch (e) {
+        console.error("Error parsing date:", e);
+        return { status: null, display: null };
+    }
+};
+
+
+const TaskCard: React.FC<TaskCardProps> = ({ task, onDeleteTask, onAddSubtask, onToggleSubtask, onUpdateTaskTime, onUpdateTaskPriority, onUpdateTaskDueDate, onOpenAIAssistant, onOpenFlashcardTask, sharedDateColor }) => {
   const [newSubtask, setNewSubtask] = useState('');
   const [isEditingTime, setIsEditingTime] = useState(false);
   const [editedTime, setEditedTime] = useState(task.estimatedTime);
   const [isEditingPriority, setIsEditingPriority] = useState(false);
+  const [isEditingDate, setIsEditingDate] = useState(false);
   
   const timeEditorRef = useRef<HTMLDivElement>(null);
   const priorityEditorRef = useRef<HTMLDivElement>(null);
 
   const priorityConfig = PRIORITY_COLORS[task.priority];
+  const { status: dateStatus, display: displayDate } = getDateStatus(task.dueDate);
   
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -43,7 +81,6 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onDeleteTask, onAddSubtask, o
     if (editedTime > 0) {
       onUpdateTaskTime(task.id, editedTime);
     } else {
-        // Reset to original value if input is invalid
         setEditedTime(task.estimatedTime);
     }
     setIsEditingTime(false);
@@ -81,33 +118,73 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onDeleteTask, onAddSubtask, o
     setIsEditingPriority(false);
   };
 
-  const handleDeleteClick = () => {
-    onDeleteTask(task.id);
-  };
-
   const completedSubtasks = (task.subtasks || []).filter(s => s.completed).length;
   const totalSubtasks = (task.subtasks || []).length;
   const progress = totalSubtasks > 0 ? (completedSubtasks / totalSubtasks) * 100 : 0;
+  
+  const cardClasses = [
+    'p-4 rounded-lg shadow-md border-l-4 transition-shadow hover:shadow-lg cursor-grab active:cursor-grabbing',
+    priorityConfig.bg,
+    'border-jam-dark/20 dark:border-white/20',
+    dateStatus === 'overdue' ? 'border-t-4 border-t-red-500' : '',
+    dateStatus === 'today' ? 'border-t-4 border-t-green-500' : '',
+    dateStatus === 'upcoming' && sharedDateColor ? `border-t-4 ${sharedDateColor}` : '',
+  ].filter(Boolean).join(' ');
 
   return (
     <div 
       draggable
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
-      className={`p-4 rounded-lg shadow-md border-l-4 ${priorityConfig.bg} border-jam-dark/20 dark:border-white/20 transition-shadow hover:shadow-lg cursor-grab active:cursor-grabbing`}
+      className={cardClasses}
     >
       <div className="flex justify-between items-start">
         <div>
           {task.day && <p className="text-xs font-bold uppercase tracking-wider text-jam-blue dark:text-pink-400 mb-1">Day {task.day}</p>}
           <h3 className={`font-bold text-md mb-2 ${priorityConfig.text}`}>{task.title}</h3>
         </div>
-        <button onClick={handleDeleteClick} className="text-slate-400 hover:text-red-500 transition-colors flex-shrink-0 ml-2">
+        <button onClick={() => onDeleteTask(task.id)} className="text-slate-400 hover:text-red-500 transition-colors flex-shrink-0 ml-2">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
         </button>
       </div>
       
       <p className={`text-sm mb-3 ${priorityConfig.text}/80`}>{task.description}</p>
       
+      <div className="mb-3">
+        {isEditingDate ? (
+            <input
+                type="date"
+                value={task.dueDate || ''}
+                onChange={(e) => {
+                    onUpdateTaskDueDate(task.id, e.target.value);
+                    setIsEditingDate(false);
+                }}
+                onBlur={() => setIsEditingDate(false)}
+                className="bg-white/50 dark:bg-slate-900/50 border border-jam-border dark:border-slate-600 rounded-md py-0.5 px-1.5 text-xs text-jam-dark dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-jam-blue dark:focus:ring-pink-500"
+                autoFocus
+            />
+        ) : (
+            displayDate && (
+                <button
+                    onClick={() => setIsEditingDate(true)}
+                    className={`flex items-center text-xs font-semibold p-1 -ml-1 rounded-md hover:bg-black/10 dark:hover:bg-white/10 ${
+                        dateStatus === 'overdue' ? 'text-red-600 dark:text-red-400' :
+                        dateStatus === 'today' ? 'text-green-600 dark:text-green-500' :
+                        'text-slate-500 dark:text-slate-400'
+                    }`}
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 mr-1.5 flex-shrink-0">
+                        <path d="M8 1.75a.75.75 0 0 1 .75.75V4h-1.5V2.5A.75.75 0 0 1 8 1.75Z" />
+                        <path fillRule="evenodd" d="M3.75 4a.75.75 0 0 0-.75.75V12.5c0 .414.336.75.75.75h8.5a.75.75 0 0 0 .75-.75V4.75a.75.75 0 0 0-.75-.75h-1V2.5a2.25 2.25 0 0 0-4.5 0V4h-1Zm-1.5 1.5v7.25c0 1.243 1.007 2.25 2.25 2.25h8.5c1.243 0 2.25-1.007 2.25-2.25V5.5A2.25 2.25 0 0 0 12.25 3.25h-.5V2.5a3.75 3.75 0 0 0-7.5 0v.75h-.5A2.25 2.25 0 0 0 2.25 5.5Z" clipRule="evenodd" />
+                    </svg>
+                    <span>Due: {displayDate}</span>
+                    {dateStatus === 'overdue' && <span className="ml-2 px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-700 dark:text-red-300">Overdue</span>}
+                    {dateStatus === 'today' && <span className="ml-2 px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-700 dark:text-green-300">Today</span>}
+                </button>
+            )
+        )}
+      </div>
+
       <div className="flex items-center space-x-2 text-xs mb-4">
         <div className="relative" ref={priorityEditorRef}>
             <button

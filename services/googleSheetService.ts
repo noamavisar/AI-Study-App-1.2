@@ -106,15 +106,24 @@ export async function importFromGoogleSheet(sheetUrl: string, sheetName: string)
 
     const status = values[doneIndex]?.trim().toUpperCase() === 'TRUE' ? TaskStatus.Done : TaskStatus.ToDo;
     const priority = mapPriority(values[priorityIndex]);
-    const dueDate = values[dateIndex]?.trim();
-    const description = dueDate ? `Due: ${dueDate}` : 'Imported from Google Sheets.';
+    
+    const dueDateRaw = dateIndex > -1 ? values[dateIndex]?.trim() : undefined;
+    let dueDate: string | undefined = undefined;
+    if (dueDateRaw) {
+        const dateObj = new Date(dueDateRaw);
+        if (!isNaN(dateObj.getTime())) {
+            // Format to YYYY-MM-DD for consistency with <input type="date">
+            dueDate = dateObj.toISOString().split('T')[0];
+        }
+    }
 
     importedTasks.push({
       title,
-      description,
+      description: 'Imported from Google Sheets.',
       priority,
       status,
       estimatedTime: 30, // Default estimated time
+      dueDate,
     });
   }
 
