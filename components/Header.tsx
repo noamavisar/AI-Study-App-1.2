@@ -5,6 +5,7 @@ interface HeaderProps {
     onAddTask: () => void;
     onBreakdownTopic: () => void;
     onPlanSprint: () => void;
+    onImportFromSheet: () => void;
     onGenerateFlashcards: () => void;
     onOpenSettings: () => void;
     focusScore: number;
@@ -12,7 +13,7 @@ interface HeaderProps {
     toggleTheme: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ onAddTask, onBreakdownTopic, onPlanSprint, onGenerateFlashcards, onOpenSettings, focusScore, theme, toggleTheme }) => {
+const Header: React.FC<HeaderProps> = ({ onAddTask, onBreakdownTopic, onPlanSprint, onImportFromSheet, onGenerateFlashcards, onOpenSettings, focusScore, theme, toggleTheme }) => {
   return (
     <header className="bg-jam-light-gray/80 dark:bg-slate-900/80 backdrop-blur-sm sticky top-0 z-20">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -23,7 +24,7 @@ const Header: React.FC<HeaderProps> = ({ onAddTask, onBreakdownTopic, onPlanSpri
             </svg>
             <h1 className="text-xl font-bold text-jam-dark dark:text-slate-200">Study Sprint AI</h1>
              <div className="hidden sm:flex items-center space-x-2 bg-white dark:bg-slate-800 px-3 py-1 rounded-full border border-jam-border dark:border-slate-700">
-                <svg xmlns="http://www.w.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 text-yellow-400">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 text-yellow-400">
                     <path fillRule="evenodd" d="M10.868 2.884c.321-.772 1.305-.772 1.626 0l1.832 4.433c.067.162.2.28.368.303l4.637.674c.81.118 1.135 1.106.55 1.672l-3.356 3.272a.375.375 0 0 0-.107.398l.792 4.617c.138.803-.707 1.42-1.428 1.026L10.28 17.24a.375.375 0 0 0-.348 0l-4.148 2.18c-.721.394-1.566-.223-1.428-1.026l.792-4.617a.375.375 0 0 0-.107-.398L1.684 9.965c-.585-.566-.26-1.554.55-1.672l4.637-.674a.375.375 0 0 0 .368-.303l1.832-4.433Z" clipRule="evenodd" />
                 </svg>
                 <span className="font-bold text-jam-dark dark:text-slate-200 text-sm">{focusScore}</span>
@@ -40,6 +41,13 @@ const Header: React.FC<HeaderProps> = ({ onAddTask, onBreakdownTopic, onPlanSpri
                 <path d="M10.75 12.75a.75.75 0 0 0-1.5 0v2.5h-2.5a.75.75 0 0 0 0 1.5h2.5v2.5a.75.75 0 0 0 1.5 0v-2.5h2.5a.75.75 0 0 0 0-1.5h-2.5v-2.5Z" />
               </svg>
               <span className="hidden sm:inline">Plan Sprint</span>
+            </button>
+             <button
+              onClick={onImportFromSheet}
+              className="flex items-center space-x-2 px-4 py-2 text-sm font-semibold text-jam-dark bg-white hover:bg-slate-100 border border-jam-border rounded-lg shadow-sm transition-colors duration-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-700"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 text-jam-orange"><path fillRule="evenodd" d="M2 3.5A1.5 1.5 0 0 1 3.5 2h13A1.5 1.5 0 0 1 18 3.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 2 16.5v-13Zm1 0a.5.5 0 0 1 .5-.5h4.5a.5.5 0 0 1 .5.5v4.5a.5.5 0 0 1-.5.5H3.5a.5.5 0 0 1-.5-.5v-4.5Zm6.5.5a.5.5 0 0 0-.5.5v4.5a.5.5 0 0 0 .5.5h4.5a.5.5 0 0 0 .5-.5V4a.5.5 0 0 0-.5-.5h-4.5ZM3 10a.5.5 0 0 1 .5-.5h4.5a.5.5 0 0 1 .5.5v4.5a.5.5 0 0 1-.5.5H3.5a.5.5 0 0 1-.5-.5v-4.5Zm6.5.5a.5.5 0 0 0-.5.5v4.5a.5.5 0 0 0 .5.5h4.5a.5.5 0 0 0 .5-.5v-4.5a.5.5 0 0 0-.5-.5h-4.5Z" clipRule="evenodd" /></svg>
+              <span className="hidden sm:inline">Import</span>
             </button>
             <button
               onClick={onGenerateFlashcards}

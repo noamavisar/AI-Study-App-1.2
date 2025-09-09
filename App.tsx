@@ -11,6 +11,7 @@ import LearningResourcesModal from './components/LearningResourcesModal';
 import FlashcardsModal from './components/FlashcardsModal';
 import LearningTipBar from './components/LearningTipBar';
 import SettingsModal from './components/SettingsModal';
+import ImportFromSheetModal from './components/ImportFromSheetModal';
 import { breakdownTaskIntoSubtasks, getLearningTipsForTopic, generateStudySprint } from './services/geminiService';
 
 const App: React.FC = () => {
@@ -20,6 +21,7 @@ const App: React.FC = () => {
   const [isResourcesModalOpen, setResourcesModalOpen] = useState(false);
   const [isFlashcardsModalOpen, setFlashcardsModalOpen] = useState(false);
   const [isSettingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [isImportModalOpen, setImportModalOpen] = useState(false);
   const [aiAssistantMode, setAiAssistantMode] = useState<AIAssistantMode>('breakdown');
   const [selectedTaskForAI, setSelectedTaskForAI] = useState<Task | null>(null);
   const [isLoadingAI, setIsLoadingAI] = useState(false);
@@ -246,6 +248,15 @@ const App: React.FC = () => {
     }
   };
 
+  const handleImportFromSheet = useCallback((importedTasks: Omit<Task, 'id'>[]) => {
+    const newTasks = importedTasks.map((task, index) => ({
+        ...task,
+        id: `imported-${Date.now()}-${index}`,
+    }));
+    setTasks(prev => [...prev, ...newTasks]);
+    setImportModalOpen(false);
+  }, []);
+
   const handleClearAllData = useCallback(() => {
     if (window.confirm('Are you sure you want to clear all your study data? This action cannot be undone.')) {
         try {
@@ -265,6 +276,7 @@ const App: React.FC = () => {
         onAddTask={() => setAddTaskModalOpen(true)} 
         onBreakdownTopic={() => openAIAssistant('breakdown', null)}
         onPlanSprint={() => setResourcesModalOpen(true)}
+        onImportFromSheet={() => setImportModalOpen(true)}
         onGenerateFlashcards={() => {
           setPreloadedFlashcards(null);
           setFlashcardsModalOpen(true);
@@ -320,6 +332,14 @@ const App: React.FC = () => {
             onSaveAsTask={handleSaveFlashcardsAsTask}
             preloadedFlashcards={preloadedFlashcards}
         />
+      )}
+
+      {isImportModalOpen && (
+          <ImportFromSheetModal
+            isOpen={isImportModalOpen}
+            onClose={() => setImportModalOpen(false)}
+            onImport={handleImportFromSheet}
+          />
       )}
 
       {isAIAssistantModalOpen && (
