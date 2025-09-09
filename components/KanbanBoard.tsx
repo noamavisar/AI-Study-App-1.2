@@ -12,10 +12,11 @@ interface KanbanBoardProps {
   onOpenAIAssistant: (mode: AIAssistantMode, task: Task) => void;
   onToggleSubtask: (taskId: string, subtaskId: string) => void;
   onAddSubtask: (taskId: string, subtaskText: string) => void;
+  onOpenFlashcardTask: (task: Task) => void;
 }
 
 const KanbanBoard: React.FC<KanbanBoardProps> = (props) => {
-  const { tasks, onUpdateTaskStatus, onUpdateTaskPriority, onDeleteTask, onOpenAIAssistant, onToggleSubtask, onAddSubtask } = props;
+  const { tasks, onUpdateTaskStatus, onUpdateTaskPriority, onDeleteTask, onOpenAIAssistant, onToggleSubtask, onAddSubtask, onOpenFlashcardTask } = props;
   
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -30,6 +31,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = (props) => {
           onOpenAIAssistant={onOpenAIAssistant}
           onToggleSubtask={onToggleSubtask}
           onAddSubtask={onAddSubtask}
+          onOpenFlashcardTask={onOpenFlashcardTask}
         />
       ))}
     </div>

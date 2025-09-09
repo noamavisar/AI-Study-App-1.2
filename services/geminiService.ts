@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { LearningResource, Priority, Task, Flashcard } from '../types';
 
@@ -130,7 +129,7 @@ Analyze the provided files to identify topics, exercises, and test questions. Cr
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: { parts: [{text: prompt}, ...fileParts] },
+      contents: [{ parts: [{text: prompt}, ...fileParts] }],
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -191,7 +190,7 @@ export async function generateFlashcards(files: File[], prompt: string): Promise
 
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
-            contents: { parts: [{text: fullPrompt}, ...fileParts] },
+            contents: [{ parts: [{text: fullPrompt}, ...fileParts] }],
             config: {
                 responseMimeType: "application/json",
                 responseSchema: {

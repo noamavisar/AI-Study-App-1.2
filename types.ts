@@ -39,6 +39,7 @@ export interface Task {
   estimatedTime: number; // in minutes
   day?: number; // Optional day for study plan
   subtasks?: Subtask[];
+  flashcards?: Flashcard[];
 }
 
 export interface Flashcard {

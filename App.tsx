@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect } from 'react';
 import { Task, TaskStatus, AIAssistantMode, Priority, LearningResource, Flashcard, Subtask, Theme } from './types';
 import Header from './components/Header';
@@ -25,6 +26,7 @@ const App: React.FC = () => {
   const [aiContent, setAiContent] = useState<string | string[] | null>(null);
   const [focusScore, setFocusScore] = useState(0);
   const [theme, setTheme] = useState<Theme>('light');
+  const [preloadedFlashcards, setPreloadedFlashcards] = useState<Flashcard[] | null>(null);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('studySprintTheme') as Theme | null;
@@ -222,6 +224,28 @@ const App: React.FC = () => {
     }
   };
   
+  const handleSaveFlashcardsAsTask = useCallback((prompt: string, flashcards: Flashcard[]) => {
+    const newTitle = `Review: ${prompt.substring(0, 30)}${prompt.length > 30 ? '...' : ''}`;
+    const newTask: Task = {
+      id: `flashcard-task-${Date.now()}`,
+      title: newTitle,
+      description: `Review the ${flashcards.length} AI-generated flashcards for this topic.`,
+      status: TaskStatus.ToDo,
+      priority: Priority.ImportantNotUrgent,
+      estimatedTime: Math.max(15, Math.round(flashcards.length * 0.75)),
+      flashcards: flashcards,
+    };
+    setTasks(prev => [newTask, ...prev]);
+    setFlashcardsModalOpen(false);
+  }, []);
+
+  const handleOpenFlashcardTask = (task: Task) => {
+    if (task.flashcards) {
+      setPreloadedFlashcards(task.flashcards);
+      setFlashcardsModalOpen(true);
+    }
+  };
+
   const handleClearAllData = useCallback(() => {
     if (window.confirm('Are you sure you want to clear all your study data? This action cannot be undone.')) {
         try {
@@ -241,7 +265,10 @@ const App: React.FC = () => {
         onAddTask={() => setAddTaskModalOpen(true)} 
         onBreakdownTopic={() => openAIAssistant('breakdown', null)}
         onPlanSprint={() => setResourcesModalOpen(true)}
-        onGenerateFlashcards={() => setFlashcardsModalOpen(true)}
+        onGenerateFlashcards={() => {
+          setPreloadedFlashcards(null);
+          setFlashcardsModalOpen(true);
+        }}
         onOpenSettings={() => setSettingsModalOpen(true)}
         focusScore={Math.round(focusScore)}
         theme={theme}
@@ -260,6 +287,7 @@ const App: React.FC = () => {
               onOpenAIAssistant={openAIAssistant}
               onToggleSubtask={handleToggleSubtask}
               onAddSubtask={handleAddSubtask}
+              onOpenFlashcardTask={handleOpenFlashcardTask}
             />
           </div>
           <div className="lg:col-span-1 space-y-8">
@@ -289,6 +317,8 @@ const App: React.FC = () => {
         <FlashcardsModal
             isOpen={isFlashcardsModalOpen}
             onClose={() => setFlashcardsModalOpen(false)}
+            onSaveAsTask={handleSaveFlashcardsAsTask}
+            preloadedFlashcards={preloadedFlashcards}
         />
       )}
 

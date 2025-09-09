@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Task, TaskStatus, AIAssistantMode, Priority } from '../types';
 import TaskCard from './TaskCard';
@@ -12,10 +13,11 @@ interface KanbanColumnProps {
   onOpenAIAssistant: (mode: AIAssistantMode, task: Task) => void;
   onToggleSubtask: (taskId: string, subtaskId: string) => void;
   onAddSubtask: (taskId: string, subtaskText: string) => void;
+  onOpenFlashcardTask: (task: Task) => void;
 }
 
 const KanbanColumn: React.FC<KanbanColumnProps> = (props) => {
-  const { status, tasks, onUpdateTaskStatus, onUpdateTaskPriority, onDeleteTask, onOpenAIAssistant, onToggleSubtask, onAddSubtask } = props;
+  const { status, tasks, onUpdateTaskStatus, onUpdateTaskPriority, onDeleteTask, onOpenAIAssistant, onToggleSubtask, onAddSubtask, onOpenFlashcardTask } = props;
   const colors = STATUS_COLORS[status];
 
   return (
@@ -38,6 +40,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = (props) => {
               onOpenAIAssistant={onOpenAIAssistant}
               onToggleSubtask={onToggleSubtask}
               onAddSubtask={onAddSubtask}
+              onOpenFlashcardTask={onOpenFlashcardTask}
             />
           ))
         ) : (

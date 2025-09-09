@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import Modal from './Modal';
 import { Flashcard } from '../types';
 import { generateFlashcards } from '../services/geminiService';
@@ -6,9 +6,11 @@ import { generateFlashcards } from '../services/geminiService';
 interface FlashcardsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onSaveAsTask: (prompt: string, flashcards: Flashcard[]) => void;
+  preloadedFlashcards?: Flashcard[] | null;
 }
 
-const FlashcardsModal: React.FC<FlashcardsModalProps> = ({ isOpen, onClose }) => {
+const FlashcardsModal: React.FC<FlashcardsModalProps> = ({ isOpen, onClose, onSaveAsTask, preloadedFlashcards }) => {
   const [prompt, setPrompt] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -17,8 +19,9 @@ const FlashcardsModal: React.FC<FlashcardsModalProps> = ({ isOpen, onClose }) =>
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [generatedInSession, setGeneratedInSession] = useState(false);
 
-  const resetState = () => {
+  const fullReset = useCallback(() => {
     setPrompt('');
     setFiles([]);
     setIsLoading(false);
@@ -26,10 +29,23 @@ const FlashcardsModal: React.FC<FlashcardsModalProps> = ({ isOpen, onClose }) =>
     setFlashcards([]);
     setCurrentCardIndex(0);
     setIsFlipped(false);
-  };
+    setGeneratedInSession(false);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+        if (preloadedFlashcards && preloadedFlashcards.length > 0) {
+            setFlashcards(preloadedFlashcards);
+            setGeneratedInSession(false);
+        }
+    } else {
+        // Delay reset to allow for closing animation
+        setTimeout(fullReset, 300);
+    }
+  }, [isOpen, preloadedFlashcards, fullReset]);
+
 
   const handleClose = () => {
-    resetState();
     onClose();
   }
 
@@ -63,8 +79,11 @@ const FlashcardsModal: React.FC<FlashcardsModalProps> = ({ isOpen, onClose }) =>
         const generated = await generateFlashcards(files, prompt);
         if (generated.length === 0) {
             setError("The AI couldn't generate any flashcards from the provided materials. Please try a different prompt or file.");
+            setFlashcards([]);
+        } else {
+            setFlashcards(generated);
+            setGeneratedInSession(true);
         }
-        setFlashcards(generated);
     } catch (e: any) {
         setError(e.message || "An unknown error occurred.");
     } finally {
@@ -84,6 +103,14 @@ const FlashcardsModal: React.FC<FlashcardsModalProps> = ({ isOpen, onClose }) =>
      setTimeout(() => {
         setCurrentCardIndex(prev => (prev - 1 + flashcards.length) % flashcards.length);
     }, 150);
+  };
+  
+  const handleStartOver = () => {
+      setFlashcards([]);
+      setCurrentCardIndex(0);
+      setIsFlipped(false);
+      setGeneratedInSession(false);
+      // Keep prompt and files for user convenience
   };
 
 
@@ -143,7 +170,7 @@ const FlashcardsModal: React.FC<FlashcardsModalProps> = ({ isOpen, onClose }) =>
         <div className="flex flex-col items-center space-y-4">
             <div className="w-full [perspective:1000px]">
                 <div
-                    className={`relative w-full h-64 transition-transform duration-500 [transform-style:preserve-d] ${isFlipped ? '[transform:rotateY(180deg)]' : ''}`}
+                    className={`relative w-full h-64 transition-transform duration-500 [transform-style:preserve-3d] ${isFlipped ? '[transform:rotateY(180deg)]' : ''}`}
                     onClick={() => setIsFlipped(!isFlipped)}
                 >
                     {/* Front of Card */}
@@ -170,9 +197,19 @@ const FlashcardsModal: React.FC<FlashcardsModalProps> = ({ isOpen, onClose }) =>
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M7.21 14.77a.75.75 0 0 1 0-1.06L10.94 10 7.21 6.29a.75.75 0 1 1 1.06-1.06l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0Z" clipRule="evenodd" /></svg>
                 </button>
             </div>
-             <button onClick={resetState} className="text-sm text-slate-500 dark:text-slate-400 hover:text-jam-dark dark:hover:text-slate-200 mt-2">
-                &larr; Generate new cards
-            </button>
+             <div className="flex items-center justify-center space-x-4 pt-2">
+                 <button onClick={handleStartOver} className="text-sm text-slate-500 dark:text-slate-400 hover:text-jam-dark dark:hover:text-slate-200">
+                    &larr; Generate new cards
+                </button>
+                {generatedInSession && (
+                    <button
+                        onClick={() => onSaveAsTask(prompt, flashcards)}
+                        className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700"
+                    >
+                        Save as Task
+                    </button>
+                )}
+             </div>
         </div>
       )}
     </Modal>
