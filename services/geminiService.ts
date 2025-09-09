@@ -54,7 +54,8 @@ IMPORTANT: Respond with ONLY a JSON object in the specified format. Do not inclu
 
     const response = await ai.models.generateContent({
         model,
-        contents: [contents], // Wrap in an array for multipart content
+        // FIX: The multipart content object should be passed directly, not wrapped in an array.
+        contents,
         config: {
             responseMimeType: 'application/json',
             responseSchema: {
@@ -113,7 +114,8 @@ Respond with ONLY a JSON array of objects in the specified format. Do not includ
 
     const response = await ai.models.generateContent({
         model,
-        contents: [contents],
+        // FIX: The multipart content object should be passed directly, not wrapped in an array.
+        contents,
         config: {
             responseMimeType: 'application/json',
             responseSchema: {
