@@ -296,12 +296,19 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onDeleteTask, onAddSubtask, o
           </button>
         </div>
         
-        <div className="flex-grow"></div>
-
-        {task.flashcards && task.flashcards.length > 0 && (
-          <button onClick={() => onOpenFlashcardTask(task.flashcards!)} className="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors" title="Study Flashcards">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M3.75 2A1.75 1.75 0 0 0 2 3.75v12.5c0 .966.784 1.75 1.75 1.75h12.5A1.75 1.75 0 0 0 18 16.25V3.75A1.75 1.75 0 0 0 16.25 2H3.75ZM10 6a.75.75 0 0 1 .75.75v2.5h2.5a.75.75 0 0 1 0 1.5h-2.5v2.5a.75.75 0 0 1-1.5 0v-2.5h-2.5a.75.75 0 0 1 0-1.5h2.5v-2.5A.75.75 0 0 1 10 6Z" /></svg>
-          </button>
+        {task.flashcards && task.flashcards.length > 0 ? (
+            <button
+                onClick={() => onOpenFlashcardTask(task.flashcards!)}
+                className="flex items-center space-x-2 px-3 py-1 text-xs font-semibold rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
+                title="Study Flashcards"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                    <path fillRule="evenodd" d="M2.5 3A1.5 1.5 0 0 0 1 4.5v11A1.5 1.5 0 0 0 2.5 17h15A1.5 1.5 0 0 0 19 15.5v-11A1.5 1.5 0 0 0 17.5 3h-15Zm3.5 2a.5.5 0 0 0-.5.5v2a.5.5 0 0 0 .5.5h2a.5.5 0 0 0 .5-.5v-2a.5.5 0 0 0-.5-.5h-2ZM6 9.5a.5.5 0 0 1 .5-.5h8a.5.5 0 0 1 .5.5v.75a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-.75Zm.5 2.25a.5.5 0 0 0-.5.5v.75a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5v-.75a.5.5 0 0 0-.5-.5h-4Z" clipRule="evenodd" />
+                </svg>
+                <span>Study Cards</span>
+            </button>
+        ) : (
+            <div className="flex-grow"></div>
         )}
       </div>
     </div>
