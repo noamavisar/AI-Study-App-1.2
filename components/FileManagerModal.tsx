@@ -1,7 +1,8 @@
 import React, { useState, useRef } from 'react';
 import Modal from './Modal';
 import { ProjectFile } from '../types';
-import { getFileIcon, dataUrlToFile } from '../utils/fileUtils';
+import { getFileIcon } from '../utils/fileUtils';
+import { getFile } from '../utils/idb';
 
 interface FileManagerModalProps {
   isOpen: boolean;
@@ -38,14 +39,19 @@ const FileManagerModal: React.FC<FileManagerModalProps> = ({ isOpen, onClose, on
   const handleSubmit = async () => {
     if (!topic.trim()) return;
     
-    const localProjectFiles = projectFiles.filter(pf => pf.sourceType === 'local' && selectedProjectFileIds.includes(pf.id));
-    const linkProjectFiles = projectFiles.filter(pf => pf.sourceType === 'link' && selectedProjectFileIds.includes(pf.id));
+    const selectedProjectFiles = projectFiles.filter(pf => selectedProjectFileIds.includes(pf.id));
+    const localProjectFiles = selectedProjectFiles.filter(pf => pf.sourceType === 'local');
+    const linkProjectFiles = selectedProjectFiles.filter(pf => pf.sourceType === 'link');
     
     const filesFromProject = await Promise.all(
-        localProjectFiles.map(pf => dataUrlToFile(pf.dataUrl!, pf.name, pf.type))
+      localProjectFiles.map(async (pf) => {
+        const blob = await getFile(pf.id);
+        if (!blob) return null;
+        return new File([blob], pf.name, { type: pf.type });
+      })
     );
     
-    const allFiles = [...tempFiles, ...filesFromProject];
+    const allFiles = [...tempFiles, ...filesFromProject.filter((f): f is File => f !== null)];
     onGenerate(topic, allFiles, linkProjectFiles);
   };
   

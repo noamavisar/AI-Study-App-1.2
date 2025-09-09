@@ -1,6 +1,9 @@
 import React, { useState, useRef } from 'react';
 import Modal from './Modal';
-import { Project } from '../types';
+import { Project, ProjectFile } from '../types';
+import { getFile } from '../utils/idb';
+import { fileToDataUrl } from '../utils/fileUtils';
+
 
 interface ProjectManagerProps {
   isOpen: boolean;
@@ -51,8 +54,25 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ isOpen, onClose, projec
     }
   };
 
-  const handleExport = (project: Project) => {
-    const jsonString = JSON.stringify(project, null, 2);
+  const handleExport = async (project: Project) => {
+    const projectToExport = { ...project };
+    
+    const filesWithData = await Promise.all(
+        project.files.map(async (file) => {
+            if (file.sourceType === 'local') {
+                const blob = await getFile(file.id);
+                if (blob) {
+                    const dataUrl = await fileToDataUrl(new File([blob], file.name, { type: file.type }));
+                    return { ...file, dataUrl };
+                }
+            }
+            return file;
+        })
+    );
+
+    projectToExport.files = filesWithData as ProjectFile[];
+
+    const jsonString = JSON.stringify(projectToExport, null, 2);
     const blob = new Blob([jsonString], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

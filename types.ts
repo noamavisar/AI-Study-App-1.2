@@ -1,4 +1,3 @@
-
 export enum TaskStatus {
   ToDo = 'To Do',
   InProgress = 'In Progress',
@@ -37,7 +36,7 @@ export interface ProjectFile {
     type: string; // MIME type for local, or a marker for links
     size: number; // in bytes
     sourceType: 'local' | 'link';
-    dataUrl?: string; // base64 for local files
+    // dataUrl is removed to prevent storing large data in localStorage
     url?: string; // URL for link files
 }
 
@@ -68,4 +67,9 @@ export interface Project {
   timerSettings: TimerSettings;
   pomodoros: number;
   files: ProjectFile[];
+}
+
+export interface LastDeletedTaskInfo {
+  task: Task;
+  projectId: string;
 }

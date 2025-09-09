@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import Header from './components/Header';
 import KanbanBoard from './components/KanbanBoard';
@@ -14,9 +14,12 @@ import ImportFromSheetModal from './components/ImportFromSheetModal';
 import ProjectManager from './components/ProjectManager';
 import ProjectFilesModal from './components/ProjectFilesModal';
 import LearningTipBar from './components/LearningTipBar';
-import { Task, TaskStatus, Priority, Project, Subtask, AIAssistantMode, Flashcard, ResourceType, ProjectFile } from './types';
+import UndoToast from './components/UndoToast';
+import ConfirmationModal from './components/ConfirmationModal';
+import { Task, TaskStatus, Priority, Project, Subtask, AIAssistantMode, Flashcard, ResourceType, ProjectFile, LastDeletedTaskInfo } from './types';
 import { generateStudySprint, generateFlashcards, generateTaskBreakdown, generateLearningTips } from './services/geminiService';
-import { fileToDataUrl, parseGoogleUrl } from './utils/fileUtils';
+import { fileToDataUrl, dataUrlToFile, parseGoogleUrl } from './utils/fileUtils';
+import { setFile, getFile, deleteFile, clearFiles } from './utils/idb';
 
 // A custom hook for persisting state to localStorage
 function useLocalStorage<T>(key: string, initialValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
@@ -29,7 +32,10 @@ function useLocalStorage<T>(key: string, initialValue: T): [T, React.Dispatch<Re
           return parsedItem.map((proj: any) => ({
               ...createDefaultProject(), // ensure all keys exist
               ...proj,
-              files: proj.files || [], // ensure files array exists
+              files: proj.files?.map((f: any) => {
+                  const { dataUrl, ...rest } = f; // Remove obsolete dataUrl
+                  return rest;
+              }) || [],
           })) as T;
       }
       return parsedItem;
@@ -45,6 +51,9 @@ function useLocalStorage<T>(key: string, initialValue: T): [T, React.Dispatch<Re
       setStoredValue(valueToStore);
       window.localStorage.setItem(key, JSON.stringify(valueToStore));
     } catch (error) {
+       if (error instanceof DOMException && (error.name === 'QuotaExceededError' || error.code === 22)) {
+            alert('Storage quota exceeded. The application may not save your data correctly. Please free up some space.');
+       }
       console.error(error);
     }
   };
@@ -84,6 +93,7 @@ const App: React.FC = () => {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isProjectManagerOpen, setIsProjectManagerOpen] = useState(false);
   const [isProjectFilesModalOpen, setIsProjectFilesModalOpen] = useState(false);
+  const [confirmation, setConfirmation] = useState<{ title: string, message: string, onConfirm: () => void } | null>(null);
 
   // AI Assistant State
   const [aiAssistantMode, setAIAssistantMode] = useState<AIAssistantMode>('breakdown');
@@ -95,6 +105,10 @@ const App: React.FC = () => {
   const [currentFlashcards, setCurrentFlashcards] = useState<Flashcard[]>([]);
   const [generatedFlashcards, setGeneratedFlashcards] = useState<Flashcard[]>([]);
   const [flashcardTopic, setFlashcardTopic] = useState('');
+
+  // Undo Delete State
+  const [lastDeletedTask, setLastDeletedTask] = useState<LastDeletedTaskInfo | null>(null);
+  const undoTimeoutRef = useRef<number | null>(null);
 
 
   useEffect(() => {
@@ -153,25 +167,60 @@ const App: React.FC = () => {
   const handleDeleteProject = (projectId: string) => {
     const projectToDelete = projects.find(p => p.id === projectId);
     if (!projectToDelete) return;
-    
+
     if (projects.length <= 1) {
-        alert("You cannot delete the only project.");
-        return;
+      alert("You cannot delete the only project.");
+      return;
     }
-    
-    if (window.confirm(`Are you sure you want to delete the "${projectToDelete.name}" project? This cannot be undone.`)) {
-        setProjects(prevProjects => prevProjects.filter(p => p.id !== projectId));
-    }
+
+    const confirmDelete = async () => {
+      const fileIdsToDelete = projectToDelete.files.filter(f => f.sourceType === 'local').map(f => f.id);
+      if (fileIdsToDelete.length > 0) {
+        await clearFiles(fileIdsToDelete);
+      }
+      setProjects(prevProjects => prevProjects.filter(p => p.id !== projectId));
+    };
+
+    setConfirmation({
+      title: "Delete Project",
+      message: `Are you sure you want to delete the "${projectToDelete.name}" project? This cannot be undone.`,
+      onConfirm: confirmDelete,
+    });
   };
 
-  const handleImportProject = (projectData: Omit<Project, 'id'>) => {
+
+  const handleImportProject = async (projectData: any) => {
+      const { files, ...restOfProject } = projectData;
+
       const newProject: Project = {
-          ...createDefaultProject(), // Ensure all default keys are present
-          ...projectData,
-          id: uuidv4(), // Assign a new unique ID to prevent conflicts
+          ...createDefaultProject(),
+          ...restOfProject,
+          id: uuidv4(),
+          files: [],
       };
+
+      // Import files to IndexedDB
+      if (Array.isArray(files)) {
+          for (const fileInfo of files) {
+              if (fileInfo.sourceType === 'local' && fileInfo.dataUrl) {
+                  const file = await dataUrlToFile(fileInfo.dataUrl, fileInfo.name, fileInfo.type);
+                  const newFile: ProjectFile = {
+                      id: uuidv4(),
+                      name: fileInfo.name,
+                      type: fileInfo.type,
+                      size: file.size,
+                      sourceType: 'local'
+                  };
+                  await setFile(newFile.id, file);
+                  newProject.files.push(newFile);
+              } else if (fileInfo.sourceType === 'link') {
+                  newProject.files.push({ ...fileInfo, id: uuidv4() });
+              }
+          }
+      }
+      
       setProjects(prev => [...prev, newProject]);
-      setActiveProjectId(newProject.id); // Switch to the newly imported project
+      setActiveProjectId(newProject.id);
   };
 
   // Task handlers
@@ -194,14 +243,46 @@ const App: React.FC = () => {
   
   const handleDeleteTask = (taskId: string) => {
     if (!activeProjectId) return;
+
+    let taskToDelete: Task | undefined;
+    
+    setProjects(prevProjects => {
+      return prevProjects.map(p => {
+        if (p.id === activeProjectId) {
+          taskToDelete = p.tasks.find(t => t.id === taskId);
+          return { ...p, tasks: p.tasks.filter(t => t.id !== taskId) };
+        }
+        return p;
+      });
+    });
+
+    if (taskToDelete) {
+      if (undoTimeoutRef.current) {
+        clearTimeout(undoTimeoutRef.current);
+      }
+      setLastDeletedTask({ task: taskToDelete, projectId: activeProjectId });
+      undoTimeoutRef.current = window.setTimeout(() => {
+        setLastDeletedTask(null);
+      }, 5000); // 5 seconds to undo
+    }
+  };
+
+  const handleUndoDeleteTask = () => {
+    if (!lastDeletedTask) return;
+
     setProjects(prevProjects => 
       prevProjects.map(p => {
-        if (p.id === activeProjectId) {
-          return { ...p, tasks: p.tasks.filter(t => t.id !== taskId) };
+        if (p.id === lastDeletedTask.projectId) {
+          return { ...p, tasks: [...p.tasks, lastDeletedTask.task] };
         }
         return p;
       })
     );
+    
+    if (undoTimeoutRef.current) {
+        clearTimeout(undoTimeoutRef.current);
+    }
+    setLastDeletedTask(null);
   };
 
   const handleAddSubtask = (taskId: string, subtaskText: string) => {
@@ -353,13 +434,21 @@ const App: React.FC = () => {
     setIsImportModalOpen(false);
   };
 
-  const handleClearAllData = () => {
-    if (window.confirm("Are you sure you want to delete ALL data for ALL projects? This action cannot be undone.")) {
-      const newProject = createDefaultProject();
-      setProjects([newProject]);
-      setActiveProjectId(newProject.id);
-      setIsSettingsOpen(false);
-    }
+  const handleClearAllData = async () => {
+    setConfirmation({
+        title: "Clear All Data",
+        message: "Are you sure you want to delete ALL data for ALL projects? This action is permanent and cannot be undone.",
+        onConfirm: async () => {
+          const allFileIds = projects.flatMap(p => p.files.filter(f => f.sourceType === 'local').map(f => f.id));
+          if (allFileIds.length > 0) {
+            await clearFiles(allFileIds);
+          }
+          const newProject = createDefaultProject();
+          setProjects([newProject]);
+          setActiveProjectId(newProject.id);
+          setIsSettingsOpen(false);
+        }
+    });
   };
   
   // File handlers
@@ -368,47 +457,44 @@ const App: React.FC = () => {
     if (!targetProjectId) return;
 
     const filesToProcess = Array.from(files);
-    let currentFiles: ProjectFile[] = [];
-    setProjects(prev => {
-      currentFiles = prev.find(p => p.id === targetProjectId)?.files || [];
-      return prev;
-    });
-
-    const existingFileNames = new Set(currentFiles.map(f => f.name));
     
-    const changes = {
-      newFiles: [] as ProjectFile[],
-      filesToUpdate: [] as ProjectFile[]
-    };
+    setProjects(prevProjects => {
+      const project = prevProjects.find(p => p.id === targetProjectId);
+      if (!project) return prevProjects;
+    
+      const existingFileNames = new Set(project.files.map(f => f.name));
+      const newFilesToAdd: ProjectFile[] = [];
+      const filesToUpdate: { file: File, existing: ProjectFile }[] = [];
 
-    for (const file of filesToProcess) {
-      if (existingFileNames.has(file.name)) {
-        if (window.confirm(`A file named "${file.name}" already exists. Do you want to replace it?`)) {
-          const dataUrl = await fileToDataUrl(file);
-          changes.filesToUpdate.push({
-            id: uuidv4(), name: file.name, type: file.type, size: file.size, sourceType: 'local', dataUrl,
+      filesToProcess.forEach(file => {
+        if (existingFileNames.has(file.name)) {
+          if (window.confirm(`A file named "${file.name}" already exists. Do you want to replace it?`)) {
+            const existingFile = project.files.find(f => f.name === file.name)!;
+            filesToUpdate.push({ file, existing: existingFile });
+          }
+        } else {
+          newFilesToAdd.push({
+            id: uuidv4(), name: file.name, type: file.type, size: file.size, sourceType: 'local'
           });
         }
-      } else {
-        const dataUrl = await fileToDataUrl(file);
-        changes.newFiles.push({
-          id: uuidv4(), name: file.name, type: file.type, size: file.size, sourceType: 'local', dataUrl,
-        });
-      }
-    }
-
-    if (changes.newFiles.length > 0 || changes.filesToUpdate.length > 0) {
-      setProjects(prev => prev.map(p => {
-        if (p.id === targetProjectId) {
-          const filesWithoutUpdates = p.files.filter(f => !changes.filesToUpdate.some(ftu => ftu.name === f.name));
-          return {
-            ...p,
-            files: [...filesWithoutUpdates, ...changes.filesToUpdate, ...changes.newFiles],
-          };
+      });
+      
+      (async () => {
+        for(const newFile of newFilesToAdd) {
+            const fileObj = filesToProcess.find(f => f.name === newFile.name);
+            if (fileObj) await setFile(newFile.id, fileObj);
         }
-        return p;
-      }));
-    }
+        for(const { file, existing } of filesToUpdate) {
+            await setFile(existing.id, file);
+        }
+      })();
+      
+      const filesWithoutUpdates = project.files.filter(f => !filesToUpdate.some(u => u.existing.id === f.id));
+
+      return prevProjects.map(p => 
+        p.id === targetProjectId ? { ...p, files: [...filesWithoutUpdates, ...newFilesToAdd] } : p
+      );
+    });
   };
   
   const handleAddLinkFile = (url: string, name: string) => {
@@ -424,8 +510,12 @@ const App: React.FC = () => {
     updateProject(activeProject.id, { files: [...activeProject.files, newLinkFile] });
   };
 
-  const handleDeleteFile = (fileId: string) => {
+  const handleDeleteFile = async (fileId: string) => {
     if (!activeProject) return;
+    const fileToDelete = activeProject.files.find(f => f.id === fileId);
+    if (fileToDelete?.sourceType === 'local') {
+      await deleteFile(fileId);
+    }
     const newFiles = activeProject.files.filter(f => f.id !== fileId);
     updateProject(activeProject.id, { files: newFiles });
   };
@@ -485,6 +575,12 @@ const App: React.FC = () => {
             </div>
         </div>
       </main>
+      
+      <UndoToast
+        lastDeletedTaskInfo={lastDeletedTask}
+        onUndo={handleUndoDeleteTask}
+        onDismiss={() => setLastDeletedTask(null)}
+      />
 
       {isAddTaskModalOpen && <AddTaskModal onClose={() => setIsAddTaskModalOpen(false)} onAddTask={handleAddTask} />}
       
@@ -555,6 +651,16 @@ const App: React.FC = () => {
             onAddLinkFile={handleAddLinkFile}
             onDeleteFile={handleDeleteFile}
         />
+       )}
+
+       {confirmation && (
+         <ConfirmationModal
+            isOpen={true}
+            onClose={() => setConfirmation(null)}
+            onConfirm={confirmation.onConfirm}
+            title={confirmation.title}
+            message={confirmation.message}
+         />
        )}
     </div>
   );
