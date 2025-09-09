@@ -26,7 +26,7 @@ const FileManagerModal: React.FC<FileManagerModalProps> = ({ isOpen, onClose, on
     if (event.target.files) {
       setTempFiles(prev => [...prev, ...Array.from(event.target.files!)]);
     }
-    if (event.target) event.target.value = '';
+     if (event.target) event.target.value = '';
   };
   
   const handleProjectFileToggle = (fileId: string) => {
@@ -55,11 +55,25 @@ const FileManagerModal: React.FC<FileManagerModalProps> = ({ isOpen, onClose, on
     <Modal isOpen={isOpen} onClose={onClose} title="Generate AI Flashcards">
       <div className="space-y-4">
         <div>
-          <label htmlFor="flashcard-topic" className="block text-sm font-medium text-slate-600 dark:text-slate-300">Main Topic</label>
-          <input type="text" id="flashcard-topic" value={topic} onChange={e => setTopic(e.target.value)} placeholder="e.g., Key Concepts in Microeconomics" className="mt-1 block w-full bg-white dark:bg-slate-900 border border-jam-border dark:border-slate-600 rounded-md shadow-sm py-2 px-3 text-jam-dark dark:text-slate-200 focus:outline-none focus:ring-jam-blue dark:focus:ring-pink-500 sm:text-sm" />
+          <label htmlFor="flashcard-topic" className="block text-sm font-medium text-slate-600 dark:text-slate-300">Flashcard Topic</label>
+          <input 
+            type="text" 
+            id="flashcard-topic" 
+            value={topic} 
+            onChange={e => setTopic(e.target.value)} 
+            placeholder="e.g., Key Concepts in Photosynthesis" 
+            className="mt-1 block w-full bg-white dark:bg-slate-900 border border-jam-border dark:border-slate-600 rounded-md shadow-sm py-2 px-3 text-jam-dark dark:text-slate-200 focus:outline-none focus:ring-jam-blue dark:focus:ring-pink-500 sm:text-sm" 
+          />
         </div>
         
-        <p className="text-sm text-slate-600 dark:text-slate-400">Provide study materials for the AI to generate flashcards from.</p>
+        <div>
+          <p className="block text-sm font-medium text-slate-600 dark:text-slate-300">
+            Provide Study Materials (Optional)
+          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            The AI will generate flashcards based on the topic. For more specific flashcards, upload or select relevant notes, PDFs, or links.
+          </p>
+        </div>
 
         {/* File Selection */}
         <div className="border border-jam-border dark:border-slate-700 rounded-lg">
