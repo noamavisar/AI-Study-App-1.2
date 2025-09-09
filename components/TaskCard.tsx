@@ -1,218 +1,227 @@
-
 import React, { useState, useRef, useEffect } from 'react';
-import { Task, TaskStatus, AIAssistantMode, Priority } from '../types';
-import { TASK_STATUSES, PRIORITY_COLORS, PRIORITIES } from '../constants';
-import { getFirstStepForTask } from '../services/geminiService';
+import { Task, AIAssistantMode, Flashcard, Priority } from '../types';
+import { PRIORITY_COLORS, PRIORITIES } from '../constants';
 
 interface TaskCardProps {
   task: Task;
-  onUpdateTaskStatus: (taskId: string, newStatus: TaskStatus) => void;
-  onUpdateTaskPriority: (taskId: string, newPriority: Priority) => void;
   onDeleteTask: (taskId: string) => void;
-  onOpenAIAssistant: (mode: AIAssistantMode, task: Task) => void;
-  onToggleSubtask: (taskId: string, subtaskId: string) => void;
   onAddSubtask: (taskId: string, subtaskText: string) => void;
-  onOpenFlashcardTask: (task: Task) => void;
+  onToggleSubtask: (taskId: string, subtaskId: string) => void;
+  onUpdateTaskTime: (taskId: string, newTime: number) => void;
+  onUpdateTaskPriority: (taskId: string, newPriority: Priority) => void;
+  onOpenAIAssistant: (mode: AIAssistantMode, task: Task) => void;
+  onOpenFlashcardTask: (flashcards: Flashcard[]) => void;
 }
 
-const TaskCard: React.FC<TaskCardProps> = ({ task, onUpdateTaskStatus, onUpdateTaskPriority, onDeleteTask, onOpenAIAssistant, onToggleSubtask, onAddSubtask, onOpenFlashcardTask }) => {
-  const [isMenuOpen, setMenuOpen] = useState(false);
-  const [isPriorityMenuOpen, setPriorityMenuOpen] = useState(false);
+const TaskCard: React.FC<TaskCardProps> = ({ task, onDeleteTask, onAddSubtask, onToggleSubtask, onUpdateTaskTime, onUpdateTaskPriority, onOpenAIAssistant, onOpenFlashcardTask }) => {
   const [newSubtask, setNewSubtask] = useState('');
-  const [isAiLoading, setIsAiLoading] = useState(false);
-  const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
-
-  const colors = PRIORITY_COLORS[task.priority];
+  const [isEditingTime, setIsEditingTime] = useState(false);
+  const [editedTime, setEditedTime] = useState(task.estimatedTime);
+  const [isEditingPriority, setIsEditingPriority] = useState(false);
   
-  const menuRef = useRef<HTMLDivElement>(null);
-  const priorityMenuRef = useRef<HTMLDivElement>(null);
+  const timeEditorRef = useRef<HTMLDivElement>(null);
+  const priorityEditorRef = useRef<HTMLDivElement>(null);
 
-  const handleOptionsMenuToggle = () => {
-    setMenuOpen(!isMenuOpen);
-    setPriorityMenuOpen(false);
-  };
+  const priorityConfig = PRIORITY_COLORS[task.priority];
+  
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (timeEditorRef.current && !timeEditorRef.current.contains(event.target as Node)) {
+        setIsEditingTime(false);
+      }
+      if (priorityEditorRef.current && !priorityEditorRef.current.contains(event.target as Node)) {
+        setIsEditingPriority(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [timeEditorRef, priorityEditorRef]);
 
-  const handlePriorityMenuToggle = () => {
-    setPriorityMenuOpen(!isPriorityMenuOpen);
-    setMenuOpen(false);
+  const handleAddTimeSubmit = () => {
+    if (editedTime > 0) {
+      onUpdateTaskTime(task.id, editedTime);
+    } else {
+        // Reset to original value if input is invalid
+        setEditedTime(task.estimatedTime);
+    }
+    setIsEditingTime(false);
   };
   
-  const handleAddSubtaskSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if(newSubtask.trim()){
-      onAddSubtask(task.id, newSubtask);
-      setNewSubtask('');
+  const handleTimeEditKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleAddTimeSubmit();
+    } else if (e.key === 'Escape') {
+      setEditedTime(task.estimatedTime);
+      setIsEditingTime(false);
     }
   };
 
-  const handleGetFirstStep = async () => {
-      setMenuOpen(false);
-      setIsAiLoading(true);
-      setAiSuggestion(null);
-      try {
-          const suggestion = await getFirstStepForTask(task.title);
-          setAiSuggestion(suggestion);
-      } catch (e) {
-          setAiSuggestion("Could not get a suggestion. Please try again.");
-      } finally {
-          setIsAiLoading(false);
-      }
+  const handleAddSubtask = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newSubtask.trim()) {
+      onAddSubtask(task.id, newSubtask.trim());
+      setNewSubtask('');
+    }
+  };
+  
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
+    e.dataTransfer.setData("taskId", task.id);
+    e.dataTransfer.setData("sourceStatus", task.status);
+    e.currentTarget.style.opacity = '0.5';
+  };
+  
+  const handleDragEnd = (e: React.DragEvent<HTMLDivElement>) => {
+    e.currentTarget.style.opacity = '1';
   };
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setMenuOpen(false);
-      }
-      if (priorityMenuRef.current && !priorityMenuRef.current.contains(event.target as Node)) {
-        setPriorityMenuOpen(false);
-      }
-    };
+  const handlePriorityChange = (newPriority: Priority) => {
+    onUpdateTaskPriority(task.id, newPriority);
+    setIsEditingPriority(false);
+  };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-  
-  const completedSubtasks = task.subtasks?.filter(st => st.completed).length || 0;
-  const totalSubtasks = task.subtasks?.length || 0;
+  const completedSubtasks = (task.subtasks || []).filter(s => s.completed).length;
+  const totalSubtasks = (task.subtasks || []).length;
   const progress = totalSubtasks > 0 ? (completedSubtasks / totalSubtasks) * 100 : 0;
-  const isFlashcardTask = task.flashcards && task.flashcards.length > 0;
 
   return (
-    <div className={`p-4 shadow-lg rounded-md hover:scale-105 transition-transform duration-300 ${colors.bg}`}>
+    <div 
+      draggable
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      className={`p-4 rounded-lg shadow-md border-l-4 ${priorityConfig.bg} border-jam-dark/20 dark:border-white/20 transition-shadow hover:shadow-lg cursor-grab active:cursor-grabbing`}
+    >
       <div className="flex justify-between items-start">
-        <h3 className={`font-bold pr-2 ${colors.text}`}>{task.title}</h3>
-        <div className="relative" ref={menuRef}>
-          <button onClick={handleOptionsMenuToggle} className="text-black/50 hover:text-black/90 dark:text-slate-400 dark:hover:text-slate-100">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-            </svg>
-          </button>
-          {isMenuOpen && (
-            <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-md shadow-xl z-10 border border-jam-border dark:border-slate-700">
-              <div className="py-1">
-                <p className="px-4 py-2 text-xs text-slate-500 dark:text-slate-400">Change Status</p>
-                {TASK_STATUSES.filter(s => s !== task.status).map(status => (
-                  <button key={status} onClick={() => { onUpdateTaskStatus(task.id, status); setMenuOpen(false); }} className="block w-full text-left px-4 py-2 text-sm text-jam-dark hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700">
-                    {status}
-                  </button>
-                ))}
-                <div className="border-t border-jam-border dark:border-slate-700 my-1"></div>
-                {!isFlashcardTask && (
-                  <>
-                    <button onClick={handleGetFirstStep} disabled={isAiLoading} className="block w-full text-left px-4 py-2 text-sm text-jam-dark hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700 disabled:opacity-50">{isAiLoading ? 'Suggesting...' : 'Suggest First Step'}</button>
-                    <button onClick={() => { onOpenAIAssistant('breakdown', task); setMenuOpen(false); }} className="block w-full text-left px-4 py-2 text-sm text-jam-dark hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700">Breakdown Task</button>
-                  </>
-                )}
-                <button onClick={() => { onOpenAIAssistant('tips', task); setMenuOpen(false); }} className="block w-full text-left px-4 py-2 text-sm text-jam-dark hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700">Get Learning Tips</button>
-                <div className="border-t border-jam-border dark:border-slate-700 my-1"></div>
-                <button onClick={() => { onDeleteTask(task.id); setMenuOpen(false); }} className="block w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-500/10">Delete Task</button>
-              </div>
-            </div>
-          )}
+        <div>
+          {task.day && <p className="text-xs font-bold uppercase tracking-wider text-jam-blue dark:text-pink-400 mb-1">Day {task.day}</p>}
+          <h3 className={`font-bold text-md mb-2 ${priorityConfig.text}`}>{task.title}</h3>
         </div>
+        <button onClick={() => onDeleteTask(task.id)} className="text-slate-400 hover:text-red-500 transition-colors flex-shrink-0 ml-2">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
+        </button>
       </div>
-
-      {isFlashcardTask ? (
-         <div className="mt-2">
-            <p className={`text-sm mb-3 text-black/70 dark:text-slate-300`}>{task.description}</p>
-            <button
-              onClick={() => onOpenFlashcardTask(task)}
-              className="w-full flex items-center justify-center space-x-2 px-4 py-2 font-semibold text-jam-dark bg-jam-yellow hover:bg-yellow-400 border border-yellow-400 rounded-lg shadow-sm transition-colors duration-200 dark:bg-yellow-800 dark:text-yellow-200 dark:border-yellow-700 dark:hover:bg-yellow-700"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-                <path d="M3.75 2A1.75 1.75 0 0 0 2 3.75v12.5c0 .966.784 1.75 1.75 1.75h12.5A1.75 1.75 0 0 0 18 16.25V3.75A1.75 1.75 0 0 0 16.25 2H3.75ZM10 6a.75.75 0 0 1 .75.75v2.5h2.5a.75.75 0 0 1 0 1.5h-2.5v2.5a.75.75 0 0 1-1.5 0v-2.5h-2.5a.75.75 0 0 1 0-1.5h2.5v-2.5A.75.75 0 0 1 10 6Z" />
-              </svg>
-              <span>Study Flashcards</span>
-            </button>
-          </div>
-      ) : (
-        <>
-          <p className={`text-sm mt-2 text-black/70 dark:text-slate-300`}>{task.description}</p>
       
-          {isAiLoading && <div className={`text-center py-2 text-xs ${colors.text}`}>Finding an easy way to start...</div>}
-          {aiSuggestion && (
-              <div className="mt-3 p-2 bg-black/5 dark:bg-slate-700/50 border border-black/10 dark:border-slate-600 rounded-md text-sm animate-fade-in">
-                  <p className={colors.text}><strong className="font-semibold">Easy First Step:</strong> {aiSuggestion}</p>
-              </div>
-          )}
-
-          {totalSubtasks > 0 && (
-              <div className="mt-4 space-y-2">
-                  <div className="w-full bg-black/10 dark:bg-slate-700 rounded-full h-1.5">
-                      <div className="bg-jam-dark dark:bg-pink-500 h-1.5 rounded-full transition-all duration-300" style={{ width: `${progress}%` }}></div>
-                  </div>
-                  <div className="max-h-28 overflow-y-auto pr-1 space-y-2">
-                      {task.subtasks?.map(subtask => (
-                          <div key={subtask.id} className="flex items-center text-sm">
-                              <input
-                                  type="checkbox"
-                                  id={`subtask-${subtask.id}`}
-                                  checked={subtask.completed}
-                                  onChange={() => onToggleSubtask(task.id, subtask.id)}
-                                  className="h-4 w-4 rounded bg-black/5 border-black/20 text-jam-dark focus:ring-jam-dark dark:bg-slate-700 dark:border-slate-600 dark:text-pink-500 dark:focus:ring-pink-500"
-                              />
-                              <label htmlFor={`subtask-${subtask.id}`} className={`ml-2 ${colors.text} ${subtask.completed ? 'line-through text-black/50 dark:text-slate-500' : ''}`}>
-                                  {subtask.text}
-                              </label>
-                          </div>
-                      ))}
-                  </div>
-              </div>
-          )}
-
-          <form onSubmit={handleAddSubtaskSubmit} className="mt-3 flex items-center">
-              <input
-                  type="text"
-                  value={newSubtask}
-                  onChange={e => setNewSubtask(e.target.value)}
-                  placeholder="Add a sub-task..."
-                  className="flex-grow bg-black/5 dark:bg-slate-900/50 border border-black/20 dark:border-slate-700 rounded-l-md py-1 px-2 text-sm text-jam-dark dark:text-slate-200 placeholder:text-black/50 dark:placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-pink-500 dark:focus:border-pink-500"
-              />
-              <button type="submit" className="bg-jam-dark hover:bg-black dark:bg-pink-600 dark:hover:bg-pink-700 text-white p-1.5 rounded-r-md disabled:bg-slate-400 dark:disabled:bg-slate-600" disabled={!newSubtask.trim()}>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" /></svg>
-              </button>
-          </form>
-        </>
-      )}
-
-
-      <div className="flex items-center justify-between mt-4">
-        <div className="flex items-center">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-black/60 dark:text-slate-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span className="text-xs text-black/60 dark:text-slate-400">{task.estimatedTime} minutes</span>
-        </div>
-        <div className="relative" ref={priorityMenuRef}>
+      <p className={`text-sm mb-3 ${priorityConfig.text}/80`}>{task.description}</p>
+      
+      <div className="flex items-center space-x-2 text-xs mb-4">
+        <div className="relative" ref={priorityEditorRef}>
             <button
-                onClick={handlePriorityMenuToggle}
-                className={`px-2 py-1 text-xs font-semibold rounded-md whitespace-nowrap transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-jam-dark ${colors.tagBg} ${colors.tagText}`}
+                onClick={() => setIsEditingPriority(prev => !prev)}
+                className={`px-2 py-1 rounded-full font-semibold ${priorityConfig.tagBg} ${priorityConfig.tagText} hover:ring-2 hover:ring-slate-400 dark:hover:ring-slate-500 transition-shadow`}
+                aria-label={`Change priority, current is ${task.priority}`}
             >
-                {task.priority}
+              {task.priority}
             </button>
-            {isPriorityMenuOpen && (
-            <div className="absolute bottom-full right-0 mb-2 w-48 bg-white dark:bg-slate-800 rounded-md shadow-xl z-10 border border-jam-border dark:border-slate-700">
-                <div className="py-1">
-                <p className="px-4 py-2 text-xs text-slate-500 dark:text-slate-400">Change Priority</p>
-                {PRIORITIES.filter(p => p !== task.priority).map(priority => (
-                    <button
-                        key={priority}
-                        onClick={() => {
-                            onUpdateTaskPriority(task.id, priority);
-                            setPriorityMenuOpen(false);
-                        }}
-                        className="block w-full text-left px-4 py-2 text-sm text-jam-dark hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700"
-                    >
-                        {priority}
-                    </button>
-                ))}
+            {isEditingPriority && (
+                <div className="absolute z-10 mt-2 -ml-2 w-56 origin-top-left rounded-md bg-white dark:bg-slate-800 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+                    <div className="py-1">
+                        {PRIORITIES.map(p => (
+                            <button
+                                key={p}
+                                onClick={() => handlePriorityChange(p)}
+                                className={`w-full text-left px-4 py-2 text-sm ${
+                                  task.priority === p 
+                                  ? 'bg-slate-100 dark:bg-slate-700 text-jam-dark dark:text-slate-100' 
+                                  : 'text-slate-700 dark:text-slate-300'
+                                } hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center space-x-3`}
+                            >
+                                <span className={`w-3 h-3 rounded-full ${PRIORITY_COLORS[p].bg.split(' ')[0]}`}></span>
+                                <span>{p}</span>
+                            </button>
+                        ))}
+                    </div>
                 </div>
-            </div>
             )}
         </div>
+        {isEditingTime ? (
+            <div ref={timeEditorRef} className="flex items-center space-x-1">
+                <input
+                    type="number"
+                    value={editedTime}
+                    onChange={(e) => setEditedTime(parseInt(e.target.value, 10) || 0)}
+                    onKeyDown={handleTimeEditKeyDown}
+                    className="w-16 bg-white/50 dark:bg-slate-900/50 border border-jam-border dark:border-slate-600 rounded-md py-0.5 px-1.5 text-xs text-jam-dark dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-jam-blue dark:focus:ring-pink-500"
+                    autoFocus
+                />
+                <button onClick={handleAddTimeSubmit} className="p-1 rounded-full bg-green-500/20 text-green-700 dark:text-green-300 hover:bg-green-500/40" aria-label="Save time">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path fillRule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.354 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clipRule="evenodd" /></svg>
+                </button>
+                <button onClick={() => setIsEditingTime(false)} className="p-1 rounded-full bg-red-500/20 text-red-700 dark:text-red-300 hover:bg-red-500/40" aria-label="Cancel edit time">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" /></svg>
+                </button>
+            </div>
+        ) : (
+            <button 
+                onClick={() => { setEditedTime(task.estimatedTime); setIsEditingTime(true); }}
+                className={`px-2 py-1 rounded-full font-semibold ${priorityConfig.tagBg} ${priorityConfig.tagText} flex items-center hover:ring-2 hover:ring-slate-400 dark:hover:ring-slate-500 transition-shadow`}
+                aria-label={`Edit estimated time, current is ${task.estimatedTime} minutes`}
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 mr-1"><path fillRule="evenodd" d="M8 1.75a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-1.5 0V2.5A.75.75 0 0 1 8 1.75Z" clipRule="evenodd" /><path d="M5.75 8a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5A.75.75 0 0 1 5.75 8Zm-2.22.72a.75.75 0 1 0 1.06 1.06l1.72-1.72a.75.75 0 1 0-1.06-1.06l-1.72 1.72Zm10.44 0a.75.75 0 1 0-1.06 1.06l1.72 1.72a.75.75 0 1 0 1.06-1.06l-1.72-1.72ZM8 14.25a6.25 6.25 0 1 0 0-12.5 6.25 6.25 0 0 0 0 12.5Zm0-1.5a4.75 4.75 0 1 0 0-9.5 4.75 4.75 0 0 0 0 9.5Z" /></svg>
+                {task.estimatedTime} min
+            </button>
+        )}
+      </div>
+
+      {totalSubtasks > 0 && (
+        <div className="mb-4">
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Sub-tasks</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">{completedSubtasks}/{totalSubtasks}</span>
+          </div>
+          <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5">
+            <div className="bg-jam-green h-1.5 rounded-full" style={{ width: `${progress}%` }}></div>
+          </div>
+        </div>
+      )}
+
+      {(task.subtasks && task.subtasks.length > 0) && (
+        <div className="space-y-2 mb-3 max-h-32 overflow-y-auto pr-2">
+          {task.subtasks.map(subtask => (
+            <div key={subtask.id} className="flex items-center text-sm">
+              <input
+                type="checkbox"
+                id={`subtask-${subtask.id}`}
+                checked={subtask.completed}
+                onChange={() => onToggleSubtask(task.id, subtask.id)}
+                className="w-4 h-4 text-jam-blue bg-slate-100 border-slate-300 rounded focus:ring-jam-blue dark:focus:ring-pink-600 dark:ring-offset-slate-800 focus:ring-2 dark:bg-slate-700 dark:border-slate-600"
+              />
+              <label htmlFor={`subtask-${subtask.id}`} className={`ml-2 ${subtask.completed ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-300'}`}>
+                {subtask.text}
+              </label>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <form onSubmit={handleAddSubtask} className="flex space-x-2 mb-4">
+        <input
+          type="text"
+          value={newSubtask}
+          onChange={(e) => setNewSubtask(e.target.value)}
+          placeholder="Add a new sub-task..."
+          className="flex-grow bg-white/50 dark:bg-slate-900/50 border border-jam-border dark:border-slate-600 rounded-md shadow-sm py-1 px-2 text-sm text-jam-dark dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-jam-blue dark:focus:ring-pink-500"
+        />
+        <button type="submit" className="px-2 py-1 text-xs font-semibold text-white bg-jam-dark rounded-md hover:bg-black dark:bg-slate-600 dark:hover:bg-slate-500">+</button>
+      </form>
+
+      <div className="border-t border-jam-border dark:border-slate-700 pt-3 flex items-center justify-between space-x-2">
+        <div className="flex items-center space-x-1">
+          <button onClick={() => onOpenAIAssistant('breakdown', task)} className="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors" title="Breakdown task with AI">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M14.22 2.22a.75.75 0 0 0-1.06 0l-8.5 8.5a.75.75 0 0 0 0 1.06l1.5 1.5a.75.75 0 0 0 1.06 0l8.5-8.5a.75.75 0 0 0 0-1.06l-1.5-1.5Zm-1.04 9.46-6.94-6.94l.47-.47 6.94 6.94-.47.47Z" /><path d="M3.5 12.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2ZM5.5 10.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2ZM7.5 8.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2ZM9.5 6.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z" /></svg>
+          </button>
+          <button onClick={() => onOpenAIAssistant('tips', task)} className="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors" title="Get learning tips from AI">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M10 2a.75.75 0 0 1 .75.75v1.25a.75.75 0 0 1-1.5 0V2.75A.75.75 0 0 1 10 2ZM5.207 5.207a.75.75 0 0 1 1.06 0l.707.707a.75.75 0 0 1-1.06 1.06l-.707-.707a.75.75 0 0 1 0-1.06ZM2 10a.75.75 0 0 1 .75-.75h1.25a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 10ZM5.914 14.086a.75.75 0 0 1 0-1.06l.707-.707a.75.75 0 1 1 1.06 1.06l-.707.707a.75.75 0 0 1-1.06 0ZM14.086 5.914a.75.75 0 0 1 1.06 0l.707.707a.75.75 0 0 1-1.06 1.06l-.707-.707a.75.75 0 0 1 0-1.06ZM18 10a.75.75 0 0 1 .75-.75h1.25a.75.75 0 0 1 0 1.5H18.75A.75.75 0 0 1 18 10ZM13.379 13.379a.75.75 0 0 1 1.06 0l.707.707a.75.75 0 0 1-1.06 1.06l-.707-.707a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" /><path d="m10 6.25c-1.933 0-3.5 1.567-3.5 3.5s1.567 3.5 3.5 3.5 3.5-1.567 3.5-3.5-1.567-3.5-3.5-3.5Z" /></svg>
+          </button>
+        </div>
+        
+        <div className="flex-grow"></div>
+
+        {task.flashcards && task.flashcards.length > 0 && (
+          <button onClick={() => onOpenFlashcardTask(task.flashcards!)} className="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors" title="Study Flashcards">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M3.75 2A1.75 1.75 0 0 0 2 3.75v12.5c0 .966.784 1.75 1.75 1.75h12.5A1.75 1.75 0 0 0 18 16.25V3.75A1.75 1.75 0 0 0 16.25 2H3.75ZM10 6a.75.75 0 0 1 .75.75v2.5h2.5a.75.75 0 0 1 0 1.5h-2.5v2.5a.75.75 0 0 1-1.5 0v-2.5h-2.5a.75.75 0 0 1 0-1.5h2.5v-2.5A.75.75 0 0 1 10 6Z" /></svg>
+          </button>
+        )}
       </div>
     </div>
   );

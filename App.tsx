@@ -1,166 +1,190 @@
+import React, { useState, useEffect, useCallback } from 'react';
 
-import React, { useState, useCallback, useEffect } from 'react';
-import { Task, TaskStatus, AIAssistantMode, Priority, LearningResource, Flashcard, Subtask, Theme } from './types';
 import Header from './components/Header';
 import KanbanBoard from './components/KanbanBoard';
-import AddTaskModal from './components/AddTaskModal';
-import AIAssistantModal from './components/AIAssistantModal';
 import Timer from './components/Timer';
 import BrainDump from './components/BrainDump';
+import LearningTipBar from './components/LearningTipBar';
+import AddTaskModal from './components/AddTaskModal';
+import AIAssistantModal from './components/AIAssistantModal';
 import LearningResourcesModal from './components/LearningResourcesModal';
 import FlashcardsModal from './components/FlashcardsModal';
-import LearningTipBar from './components/LearningTipBar';
 import SettingsModal from './components/SettingsModal';
 import ImportFromSheetModal from './components/ImportFromSheetModal';
+
+import { Task, TaskStatus, Subtask, AIAssistantMode, Theme, Priority, LearningResource, Flashcard } from './types';
 import { breakdownTaskIntoSubtasks, getLearningTipsForTopic, generateStudySprint } from './services/geminiService';
 
-const App: React.FC = () => {
+// Simple unique ID generator to avoid external dependencies
+const uuidv4 = () => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+  });
+}
+
+function App() {
+  // State management
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [isAddTaskModalOpen, setAddTaskModalOpen] = useState(false);
-  const [isAIAssistantModalOpen, setAIAssistantModalOpen] = useState(false);
-  const [isResourcesModalOpen, setResourcesModalOpen] = useState(false);
-  const [isFlashcardsModalOpen, setFlashcardsModalOpen] = useState(false);
-  const [isSettingsModalOpen, setSettingsModalOpen] = useState(false);
-  const [isImportModalOpen, setImportModalOpen] = useState(false);
-  const [aiAssistantMode, setAiAssistantMode] = useState<AIAssistantMode>('breakdown');
-  const [selectedTaskForAI, setSelectedTaskForAI] = useState<Task | null>(null);
-  const [isLoadingAI, setIsLoadingAI] = useState(false);
-  const [aiContent, setAiContent] = useState<string | string[] | null>(null);
-  const [focusScore, setFocusScore] = useState(0);
   const [theme, setTheme] = useState<Theme>('light');
+  const [focusScore, setFocusScore] = useState<number>(0);
+  
+  // Modal states
+  const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
+  const [isAIAssistantModalOpen, setIsAIAssistantModalOpen] = useState(false);
+  const [isSprintModalOpen, setIsSprintModalOpen] = useState(false);
+  const [isFlashcardsModalOpen, setIsFlashcardsModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isImportSheetModalOpen, setIsImportSheetModalOpen] = useState(false);
+
+  // AI Assistant state
+  const [aiAssistantMode, setAiAssistantMode] = useState<AIAssistantMode>('breakdown');
+  const [aiAssistantTask, setAiAssistantTask] = useState<Task | null>(null);
+  const [aiIsLoading, setAiIsLoading] = useState(false);
+  const [aiContent, setAiContent] = useState<string | string[] | null>(null);
+
+  // Sprint Planner state
+  const [sprintIsLoading, setSprintIsLoading] = useState(false);
+
+  // Flashcards state
   const [preloadedFlashcards, setPreloadedFlashcards] = useState<Flashcard[] | null>(null);
 
+  // Load state from local storage on initial render
   useEffect(() => {
-    const savedTheme = localStorage.getItem('studySprintTheme') as Theme | null;
-    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const initialTheme = savedTheme || (prefersDark ? 'dark' : 'light');
-    setTheme(initialTheme);
+    try {
+      const savedTasks = localStorage.getItem('studySprintTasks');
+      if (savedTasks) {
+        setTasks(JSON.parse(savedTasks));
+      }
+      const savedTheme = localStorage.getItem('studySprintTheme') as Theme | null;
+      if (savedTheme) {
+        setTheme(savedTheme);
+      }
+      const savedFocusScore = localStorage.getItem('studySprintFocusScore');
+      if (savedFocusScore) {
+        setFocusScore(JSON.parse(savedFocusScore));
+      }
+    } catch (error) {
+      console.error("Failed to load data from local storage", error);
+      // If data is corrupted, clear it
+      localStorage.removeItem('studySprintTasks');
+    }
   }, []);
 
+  // Save state to local storage whenever it changes
   useEffect(() => {
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-      document.body.classList.add('dark-theme');
-      document.body.classList.remove('light-theme');
-    } else {
-      document.documentElement.classList.remove('dark');
-      document.body.classList.add('light-theme');
-      document.body.classList.remove('dark-theme');
+    try {
+      localStorage.setItem('studySprintTasks', JSON.stringify(tasks));
+    } catch (error) {
+      console.error("Failed to save tasks to local storage", error);
     }
-    localStorage.setItem('studySprintTheme', theme);
+  }, [tasks]);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    try {
+      localStorage.setItem('studySprintTheme', theme);
+    } catch (error) {
+      console.error("Failed to save theme to local storage", error);
+    }
   }, [theme]);
+  
+   useEffect(() => {
+    try {
+      localStorage.setItem('studySprintFocusScore', JSON.stringify(focusScore));
+    } catch (error) {
+      console.error("Failed to save focus score to local storage", error);
+    }
+  }, [focusScore]);
 
   const toggleTheme = () => {
     setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
   };
 
-  useEffect(() => {
-    // Load tasks from local storage on initial render
-    try {
-      const storedTasks = localStorage.getItem('studySprintTasks');
-      if (storedTasks) {
-        setTasks(JSON.parse(storedTasks));
-      } else {
-         // Add some default tasks for first-time users
-        setTasks([
-            { id: '1', title: 'Review Chapter 1: Kinematics', description: 'Focus on equations of motion.', status: TaskStatus.ToDo, priority: Priority.UrgentImportant, estimatedTime: 60, subtasks: [{id: 'st1', text: 'Read summary', completed: true}, {id: 'st2', text: 'Review formulas', completed: false}] },
-            { id: '2', title: 'Practice Stoichiometry Problems', description: 'Complete 10 problems from the textbook.', status: TaskStatus.ToDo, priority: Priority.ImportantNotUrgent, estimatedTime: 90 },
-            { id: '3', title: 'Draft Essay Outline', description: 'Create a structure for the history essay on the French Revolution.', status: TaskStatus.InProgress, priority: Priority.UrgentImportant, estimatedTime: 45 },
-            { id: '4', title: 'Memorize Vocabulary List', description: 'Use flashcards for Spanish vocabulary.', status: TaskStatus.Done, priority: Priority.ImportantNotUrgent, estimatedTime: 30 },
-        ]);
-      }
-       const storedScore = localStorage.getItem('studySprintFocusScore');
-       if (storedScore) {
-           setFocusScore(JSON.parse(storedScore));
-       }
-    } catch (e) {
-      console.error("Failed to load data from local storage", e);
-    }
-  }, []);
-
-  useEffect(() => {
-    // Save tasks and score to local storage whenever they change
-    try {
-      localStorage.setItem('studySprintTasks', JSON.stringify(tasks));
-      localStorage.setItem('studySprintFocusScore', JSON.stringify(focusScore));
-    } catch (e) {
-      console.error("Failed to save data to local storage", e);
-    }
-  }, [tasks, focusScore]);
-
-
   const handleAddTask = useCallback((task: Omit<Task, 'id' | 'status'>) => {
-    setTasks(prev => [...prev, { ...task, id: Date.now().toString(), status: TaskStatus.ToDo }]);
-    setAddTaskModalOpen(false);
+    const newTask: Task = {
+      ...task,
+      id: uuidv4(),
+      status: TaskStatus.ToDo,
+      subtasks: [],
+    };
+    setTasks(prev => [newTask, ...prev]);
+    setIsAddTaskModalOpen(false);
   }, []);
 
   const handleUpdateTaskStatus = useCallback((taskId: string, newStatus: TaskStatus) => {
-    setTasks(prev => {
-        const newTasks = [...prev];
-        const taskIndex = newTasks.findIndex(task => task.id === taskId);
-        if (taskIndex === -1) return prev;
-
-        const task = newTasks[taskIndex];
-        
-        const hasIncompleteSubtasks = task.subtasks?.some(st => !st.completed);
-        if (newStatus === TaskStatus.Done && hasIncompleteSubtasks) {
-            alert("Please complete all subtasks before marking the main task as done.");
-            return prev;
+    setTasks(prev =>
+      prev.map(task => {
+        if (task.id === taskId) {
+          if (task.status !== TaskStatus.Done && newStatus === TaskStatus.Done) {
+            setFocusScore(score => score + 10);
+          } else if (task.status === TaskStatus.Done && newStatus !== TaskStatus.Done) {
+            setFocusScore(score => Math.max(0, score - 10));
+          }
+          return { ...task, status: newStatus };
         }
+        return task;
+      })
+    );
+  }, []);
 
-        if (task.status !== TaskStatus.Done && newStatus === TaskStatus.Done) {
-            setFocusScore(s => s + (task.estimatedTime / 5) || 10);
+  const handleDeleteTask = useCallback((taskId: string) => {
+    if (window.confirm('Are you sure you want to delete this task?')) {
+        setTasks(prev => prev.filter(task => task.id !== taskId));
+    }
+  }, []);
+
+  const handleAddSubtask = useCallback((taskId: string, subtaskText: string) => {
+    const newSubtask: Subtask = { id: uuidv4(), text: subtaskText, completed: false };
+    setTasks(prev =>
+      prev.map(task =>
+        task.id === taskId ? { ...task, subtasks: [...(task.subtasks || []), newSubtask] } : task
+      )
+    );
+  }, []);
+
+  const handleToggleSubtask = useCallback((taskId: string, subtaskId: string) => {
+    setTasks(prev =>
+      prev.map(task => {
+        if (task.id === taskId) {
+          let subtaskCompleted = false;
+          const newSubtasks = (task.subtasks || []).map(sub => {
+            if (sub.id === subtaskId) {
+              subtaskCompleted = !sub.completed;
+              return { ...sub, completed: subtaskCompleted };
+            }
+            return sub;
+          });
+          // Update focus score when subtask is completed
+          if(subtaskCompleted) {
+            setFocusScore(score => score + 2);
+          } else {
+            setFocusScore(score => Math.max(0, score - 2));
+          }
+          return { ...task, subtasks: newSubtasks };
         }
-        
-        newTasks[taskIndex] = { ...task, status: newStatus };
-        return newTasks;
-    });
+        return task;
+      })
+    );
+  }, []);
+  
+  const handleUpdateTaskTime = useCallback((taskId: string, newTime: number) => {
+    setTasks(prev => prev.map(task => task.id === taskId ? { ...task, estimatedTime: newTime } : task));
   }, []);
 
   const handleUpdateTaskPriority = useCallback((taskId: string, newPriority: Priority) => {
     setTasks(prev => prev.map(task => task.id === taskId ? { ...task, priority: newPriority } : task));
   }, []);
 
-  const handleDeleteTask = useCallback((taskId: string) => {
-    setTasks(prev => prev.filter(task => task.id !== taskId));
-  }, []);
-
-  const handleToggleSubtask = useCallback((taskId: string, subtaskId: string) => {
-    setTasks(prev => prev.map(task => {
-        if (task.id === taskId) {
-            const updatedSubtasks = task.subtasks?.map(st => 
-                st.id === subtaskId ? { ...st, completed: !st.completed } : st
-            );
-            return { ...task, subtasks: updatedSubtasks };
-        }
-        return task;
-    }));
-  }, []);
-
-  const handleAddSubtask = useCallback((taskId: string, subtaskText: string) => {
-      setTasks(prev => prev.map(task => {
-          if (task.id === taskId && subtaskText.trim()) {
-              const newSubtask: Subtask = {
-                  id: Date.now().toString(),
-                  text: subtaskText.trim(),
-                  completed: false,
-              };
-              const subtasks = task.subtasks ? [...task.subtasks, newSubtask] : [newSubtask];
-              return { ...task, subtasks };
-          }
-          return task;
-      }));
-  }, []);
-  
-  const openAIAssistant = (mode: AIAssistantMode, task: Task | null) => {
+  const handleOpenAIAssistant = useCallback((mode: AIAssistantMode, task: Task | null) => {
     setAiAssistantMode(mode);
-    setSelectedTaskForAI(task);
+    setAiAssistantTask(task);
     setAiContent(null);
-    setAIAssistantModalOpen(true);
-  };
+    setIsAIAssistantModalOpen(true);
+  }, []);
 
-  const handleAIAssistantSubmit = async (topic: string) => {
-    setIsLoadingAI(true);
+  const handleAISubmit = async (topic: string) => {
+    setAiIsLoading(true);
     setAiContent(null);
     try {
       if (aiAssistantMode === 'breakdown') {
@@ -170,200 +194,191 @@ const App: React.FC = () => {
         const tips = await getLearningTipsForTopic(topic);
         setAiContent(tips);
       }
-    } catch (e) {
-      console.error("AI Assistant Error:", e);
-      setAiContent("Sorry, I couldn't generate a response. Please check your API key and try again.");
+    } catch (error: any) {
+      console.error(error);
+      setAiContent(error.message || 'Sorry, there was an error generating content from the AI.');
     } finally {
-      setIsLoadingAI(false);
-    }
-  };
-
-  const addSubtasksToBoard = (subtasks: string[]) => {
-    if (!selectedTaskForAI) { // This case handles breakdown from header for general topics
-        const newTasks: Task[] = subtasks.map((title, index) => ({
-          id: `ai-${Date.now()}-${index}`,
-          title,
-          description: `Generated from a general topic breakdown`,
-          status: TaskStatus.ToDo,
-          priority: Priority.ImportantNotUrgent, 
-          estimatedTime: 30,
-        }));
-        setTasks(prev => [...prev, ...newTasks]);
-    } else { // This case adds the generated list as subtasks to the selected task
-        setTasks(prev => prev.map(task => {
-            if (task.id === selectedTaskForAI.id) {
-                const newSubtasks: Subtask[] = subtasks.map((text, index) => ({
-                    id: `ai-sub-${Date.now()}-${index}`,
-                    text,
-                    completed: false,
-                }));
-                const existingSubtasks = task.subtasks || [];
-                return { ...task, subtasks: [...existingSubtasks, ...newSubtasks] };
-            }
-            return task;
-        }));
-    }
-    setAIAssistantModalOpen(false);
-  };
-
-  const handleGenerateSprint = async (resources: Omit<LearningResource, 'id'>[], days: number) => {
-    setIsLoadingAI(true);
-    try {
-        const generatedTasks = await generateStudySprint(resources, days);
-        const newTasks: Task[] = generatedTasks.map((task, index) => ({
-            ...task,
-            id: `sprint-${Date.now()}-${index}`,
-            status: TaskStatus.ToDo,
-            description: task.day ? `Day ${task.day}: ${task.description}` : task.description,
-        }));
-        setTasks(prev => [...prev, ...newTasks]);
-        setResourcesModalOpen(false);
-    } catch (e) {
-        console.error("Sprint Generation Error:", e);
-        alert("Sorry, I couldn't generate a study plan. Please check your files and try again.");
-    } finally {
-        setIsLoadingAI(false);
+      setAiIsLoading(false);
     }
   };
   
-  const handleSaveFlashcardsAsTask = useCallback((prompt: string, flashcards: Flashcard[]) => {
-    const newTitle = `Review: ${prompt.substring(0, 30)}${prompt.length > 30 ? '...' : ''}`;
-    const newTask: Task = {
-      id: `flashcard-task-${Date.now()}`,
-      title: newTitle,
-      description: `Review the ${flashcards.length} AI-generated flashcards for this topic.`,
-      status: TaskStatus.ToDo,
-      priority: Priority.ImportantNotUrgent,
-      estimatedTime: Math.max(15, Math.round(flashcards.length * 0.75)),
-      flashcards: flashcards,
-    };
-    setTasks(prev => [newTask, ...prev]);
-    setFlashcardsModalOpen(false);
-  }, []);
-
-  const handleOpenFlashcardTask = (task: Task) => {
-    if (task.flashcards) {
-      setPreloadedFlashcards(task.flashcards);
-      setFlashcardsModalOpen(true);
+  const handleAddSubtasksFromAI = (subtasks: string[]) => {
+      if (aiAssistantTask) {
+        // Add to existing task
+        const newSubtasks: Subtask[] = subtasks.map(text => ({ id: uuidv4(), text, completed: false }));
+         setTasks(prev =>
+          prev.map(task =>
+            task.id === aiAssistantTask.id ? { ...task, subtasks: [...(task.subtasks || []), ...newSubtasks] } : task
+          )
+        );
+      } else {
+        // Add as new tasks
+        const newTasks: Task[] = subtasks.map(title => ({
+          id: uuidv4(),
+          title,
+          description: '',
+          status: TaskStatus.ToDo,
+          priority: Priority.ImportantNotUrgent,
+          estimatedTime: 30,
+          subtasks: [],
+        }));
+        setTasks(prev => [...newTasks, ...prev]);
+      }
+      setIsAIAssistantModalOpen(false);
+  };
+  
+  const handleGenerateSprint = async (resources: Omit<LearningResource, 'id'>[], days: number) => {
+    setSprintIsLoading(true);
+    try {
+        const sprintTasks = await generateStudySprint(resources, days);
+        const newTasks: Task[] = sprintTasks.map(task => ({
+            ...task,
+            id: uuidv4(),
+            status: TaskStatus.ToDo,
+        }));
+        setTasks(prev => [...newTasks, ...prev]);
+        setIsSprintModalOpen(false);
+    } catch(error: any) {
+        console.error(error);
+        alert(`Failed to generate sprint plan: ${error.message}`);
+    } finally {
+        setSprintIsLoading(false);
     }
   };
 
-  const handleImportFromSheet = useCallback((importedTasks: Omit<Task, 'id'>[]) => {
-    const newTasks = importedTasks.map((task, index) => ({
-        ...task,
-        id: `imported-${Date.now()}-${index}`,
+  const handleImportTasks = (importedTasks: Omit<Task, 'id'>[]) => {
+    const newTasks: Task[] = importedTasks.map(task => ({
+      ...task,
+      id: uuidv4(),
     }));
-    setTasks(prev => [...prev, ...newTasks]);
-    setImportModalOpen(false);
-  }, []);
+    setTasks(prev => [...newTasks, ...prev]);
+    setIsImportSheetModalOpen(false);
+  };
+  
+  const handleSaveFlashcardsAsTask = (prompt: string, flashcards: Flashcard[]) => {
+    const newTask: Task = {
+      id: uuidv4(),
+      title: `Study Flashcards: ${prompt.substring(0, 50)}${prompt.length > 50 ? '...' : ''}`,
+      description: `Review ${flashcards.length} flashcards generated by AI.`,
+      status: TaskStatus.ToDo,
+      priority: Priority.ImportantNotUrgent,
+      estimatedTime: 30,
+      flashcards: flashcards,
+    };
+    setTasks(prev => [newTask, ...prev]);
+    setIsFlashcardsModalOpen(false);
+  };
+  
+  const handleOpenFlashcardTask = (flashcards: Flashcard[]) => {
+    setPreloadedFlashcards(flashcards);
+    setIsFlashcardsModalOpen(true);
+  };
 
-  const handleClearAllData = useCallback(() => {
-    if (window.confirm('Are you sure you want to clear all your study data? This action cannot be undone.')) {
-        try {
-            localStorage.clear();
-            window.location.reload();
-        } catch (e) {
-            console.error("Failed to clear local storage", e);
-            alert("There was an error clearing your data.");
-        }
+  const handleClearAllData = () => {
+    if(window.confirm('Are you sure you want to clear ALL data? This includes tasks, scores, and settings. This action cannot be undone.')) {
+        localStorage.removeItem('studySprintTasks');
+        localStorage.removeItem('studySprintTheme');
+        localStorage.removeItem('studySprintPomodoros');
+        localStorage.removeItem('studySprintFocusScore');
+        localStorage.removeItem('studySprintBrainDump');
+        localStorage.removeItem('studySprintTimerSettings');
+        setTasks([]);
+        setTheme('light');
+        setFocusScore(0);
+        setIsSettingsModalOpen(false);
+        // Force reload to clear any other in-memory state (like Timer component's state)
+        window.location.reload();
     }
-  }, []);
-
+  };
 
   return (
-    <div className="min-h-screen font-sans">
-      <Header 
-        onAddTask={() => setAddTaskModalOpen(true)} 
-        onBreakdownTopic={() => openAIAssistant('breakdown', null)}
-        onPlanSprint={() => setResourcesModalOpen(true)}
-        onImportFromSheet={() => setImportModalOpen(true)}
-        onGenerateFlashcards={() => {
-          setPreloadedFlashcards(null);
-          setFlashcardsModalOpen(true);
-        }}
-        onOpenSettings={() => setSettingsModalOpen(true)}
-        focusScore={Math.round(focusScore)}
+    <div className={`${theme === 'light' ? 'light-theme' : 'dark-theme'} min-h-screen transition-colors duration-300`}>
+      <Header
+        onAddTask={() => setIsAddTaskModalOpen(true)}
+        onBreakdownTopic={() => handleOpenAIAssistant('breakdown', null)}
+        onPlanSprint={() => setIsSprintModalOpen(true)}
+        onImportFromSheet={() => setIsImportSheetModalOpen(true)}
+        onGenerateFlashcards={() => { setPreloadedFlashcards(null); setIsFlashcardsModalOpen(true); }}
+        onOpenSettings={() => setIsSettingsModalOpen(true)}
+        focusScore={focusScore}
         theme={theme}
         toggleTheme={toggleTheme}
       />
       <LearningTipBar />
-      
-      <main className="p-4 sm:p-6 lg:p-8">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          <div className="lg:col-span-3">
-            <KanbanBoard 
-              tasks={tasks} 
+      <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-6 items-start">
+          <div className="lg:col-span-2 xl:col-span-3">
+            <KanbanBoard
+              tasks={tasks}
               onUpdateTaskStatus={handleUpdateTaskStatus}
-              onUpdateTaskPriority={handleUpdateTaskPriority}
               onDeleteTask={handleDeleteTask}
-              onOpenAIAssistant={openAIAssistant}
-              onToggleSubtask={handleToggleSubtask}
               onAddSubtask={handleAddSubtask}
+              onToggleSubtask={handleToggleSubtask}
+              onUpdateTaskTime={handleUpdateTaskTime}
+              onUpdateTaskPriority={handleUpdateTaskPriority}
+              onOpenAIAssistant={handleOpenAIAssistant}
               onOpenFlashcardTask={handleOpenFlashcardTask}
             />
           </div>
-          <div className="lg:col-span-1 space-y-8">
-             <Timer />
-             <BrainDump />
+          <div className="space-y-6 lg:col-span-1 xl:col-span-1">
+            <Timer />
+            <BrainDump />
           </div>
         </div>
       </main>
-
-      {isAddTaskModalOpen && (
-        <AddTaskModal 
-          onClose={() => setAddTaskModalOpen(false)}
-          onAddTask={handleAddTask}
+      
+      {/* Modals */}
+      {isAddTaskModalOpen && <AddTaskModal onClose={() => setIsAddTaskModalOpen(false)} onAddTask={handleAddTask} />}
+      
+      {isAIAssistantModalOpen && (
+        <AIAssistantModal
+          isOpen={isAIAssistantModalOpen}
+          onClose={() => setIsAIAssistantModalOpen(false)}
+          mode={aiAssistantMode}
+          task={aiAssistantTask}
+          isLoading={aiIsLoading}
+          content={aiContent}
+          onSubmit={handleAISubmit}
+          onAddSubtasks={handleAddSubtasksFromAI}
         />
       )}
-
-      {isResourcesModalOpen && (
+      
+      {isSprintModalOpen && (
         <LearningResourcesModal
-            isOpen={isResourcesModalOpen}
-            onClose={() => setResourcesModalOpen(false)}
+            isOpen={isSprintModalOpen}
+            onClose={() => setIsSprintModalOpen(false)}
             onGenerateSprint={handleGenerateSprint}
-            isLoading={isLoadingAI}
+            isLoading={sprintIsLoading}
         />
       )}
 
       {isFlashcardsModalOpen && (
-        <FlashcardsModal
-            isOpen={isFlashcardsModalOpen}
-            onClose={() => setFlashcardsModalOpen(false)}
+        <FlashcardsModal 
+            isOpen={isFlashcardsModalOpen} 
+            onClose={() => setIsFlashcardsModalOpen(false)}
             onSaveAsTask={handleSaveFlashcardsAsTask}
             preloadedFlashcards={preloadedFlashcards}
         />
       )}
-
-      {isImportModalOpen && (
-          <ImportFromSheetModal
-            isOpen={isImportModalOpen}
-            onClose={() => setImportModalOpen(false)}
-            onImport={handleImportFromSheet}
+      
+      {isSettingsModalOpen && (
+          <SettingsModal
+            isOpen={isSettingsModalOpen}
+            onClose={() => setIsSettingsModalOpen(false)}
+            onClearAllData={handleClearAllData}
           />
       )}
 
-      {isAIAssistantModalOpen && (
-        <AIAssistantModal
-          isOpen={isAIAssistantModalOpen}
-          onClose={() => setAIAssistantModalOpen(false)}
-          mode={aiAssistantMode}
-          task={selectedTaskForAI}
-          isLoading={isLoadingAI}
-          content={aiContent}
-          onSubmit={handleAIAssistantSubmit}
-          onAddSubtasks={addSubtasksToBoard}
-        />
+      {isImportSheetModalOpen && (
+          <ImportFromSheetModal
+            isOpen={isImportSheetModalOpen}
+            onClose={() => setIsImportSheetModalOpen(false)}
+            onImport={handleImportTasks}
+          />
       )}
-      
-      {isSettingsModalOpen && (
-        <SettingsModal
-            isOpen={isSettingsModalOpen}
-            onClose={() => setSettingsModalOpen(false)}
-            onClearAllData={handleClearAllData}
-        />
-      )}
+
     </div>
   );
-};
+}
 
 export default App;
