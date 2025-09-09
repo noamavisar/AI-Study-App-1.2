@@ -65,262 +65,228 @@ const App: React.FC = () => {
 
     const activeProject = projects.find(p => p.id === activeProjectId) || projects[0];
     
-    // Ensure there's always at least one project
+    // Ensure there's always at least one project and the active project is valid
     useEffect(() => {
         if (projects.length === 0) {
             const defaultProject = createDefaultProject();
             setProjects([defaultProject]);
             setActiveProjectId(defaultProject.id);
         } else if (!projects.find(p => p.id === activeProjectId)) {
-            // If active project was deleted, switch to the first one
+            // If active project was deleted or is invalid, switch to the first one.
             setActiveProjectId(projects[0].id);
         }
     }, [projects, activeProjectId]);
 
 
-    // Data persistence
+    // Data Persistence
     useEffect(() => {
-        localStorage.setItem('studyjam-projects', JSON.stringify(projects));
-        localStorage.setItem('studyjam-active-project-id', activeProjectId);
-    }, [projects, activeProjectId]);
+        try {
+            localStorage.setItem('studyjam-projects', JSON.stringify(projects));
+        } catch (error) {
+            console.error("Failed to save projects to localStorage", error);
+        }
+    }, [projects]);
 
-    const updateProject = (projectId: string, updates: Partial<Omit<Project, 'id'>>) => {
-        setProjects(prev => prev.map(p => p.id === projectId ? { ...p, ...updates } : p));
-    };
-    
-    const { tasks, timerSettings, pomodoros, brainDump, files } = activeProject;
-    
-    // MODAL STATE
+    useEffect(() => {
+        localStorage.setItem('studyjam-active-project-id', activeProjectId);
+    }, [activeProjectId]);
+
+    // Modal States
     const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
     const [isAIAssistantModalOpen, setIsAIAssistantModalOpen] = useState(false);
+    const [aiAssistantMode, setAIAssistantMode] = useState<AIAssistantMode>('breakdown');
+    const [aiAssistantTask, setAIAssistantTask] = useState<Task | null>(null);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [isSprintGeneratorOpen, setIsSprintGeneratorOpen] = useState(false);
     const [isFlashcardGeneratorOpen, setIsFlashcardGeneratorOpen] = useState(false);
-    const [isFlashcardViewerOpen, setIsFlashcardViewerOpen] = useState(false);
+    const [isFlashcardsModalOpen, setIsFlashcardsModalOpen] = useState(false);
+    const [flashcardsToShow, setFlashcardsToShow] = useState<Flashcard[]>([]);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [isProjectManagerOpen, setIsProjectManagerOpen] = useState(false);
-
-    // AI MODAL STATE
-    const [aiAssistantMode, setAIAssistantMode] = useState<AIAssistantMode>('breakdown');
-    const [aiTargetTask, setAITargetTask] = useState<Task | null>(null);
-    const [isAILoading, setIsAILoading] = useState(false);
+    
+    // AI State
+    const [isLoadingAI, setIsLoadingAI] = useState(false);
     const [aiContent, setAIContent] = useState<string | string[] | null>(null);
+    const [generatedFlashcards, setGeneratedFlashcards] = useState<Flashcard[]>([]);
 
-    // FLASHCARD STATE
-    const [flashcardsToStudy, setFlashcardsToStudy] = useState<Flashcard[]>([]);
-    const [generatedFlashcardPrompt, setGeneratedFlashcardPrompt] = useState<string>('');
-    const [isViewingNewFlashcards, setIsViewingNewFlashcards] = useState(false);
 
-    // CRUD HANDLERS
-    const handleAddTask = (newTask: Omit<Task, 'id' | 'status'>) => {
-        const task: Task = { ...newTask, id: uuidv4(), status: TaskStatus.ToDo };
-        updateProject(activeProjectId, { tasks: [...tasks, task] });
-        setIsAddTaskModalOpen(false);
+    // Handlers (Project)
+    const handleAddProject = (name: string) => {
+        const newProject: Project = { ...createDefaultProject(), id: uuidv4(), name, };
+        const newProjects = [...projects, newProject];
+        setProjects(newProjects);
+        setActiveProjectId(newProject.id); // Switch to the new project
+    };
+
+    const handleRenameProject = (projectId: string, newName: string) => {
+        setProjects(prev => prev.map(p => p.id === projectId ? { ...p, name: newName } : p));
+    };
+
+    const handleDeleteProject = (projectId: string) => {
+        // Find the project from the current state to get its name for the confirmation.
+        const projectToDelete = projects.find(p => p.id === projectId);
+        if (!projectToDelete) {
+            console.error("Attempted to delete a project that does not exist.");
+            return;
+        }
+
+        // Prevent deleting the last project.
+        if (projects.length <= 1) {
+            // This is just a safeguard; the button in the UI should be disabled.
+            return;
+        }
+
+        // 1. Get user confirmation OUTSIDE of the state updater.
+        const confirmed = window.confirm(`Are you sure you want to delete the "${projectToDelete.name}" project?`);
+
+        // 2. If confirmed, update the state.
+        if (confirmed) {
+            setProjects(prevProjects => prevProjects.filter(p => p.id !== projectId));
+            // The useEffect hook that watches `projects` will automatically handle
+            // switching the active project if the deleted one was active.
+        }
     };
     
-    const handleDeleteTask = (taskId: string) => {
-        if (window.confirm("Are you sure you want to delete this task?")) {
-            setProjects(prevProjects =>
-                prevProjects.map(p =>
-                    p.id === activeProjectId
-                        ? { ...p, tasks: p.tasks.filter(t => t.id !== taskId) }
-                        : p
-                )
-            );
-        }
+    const handleSwitchProject = (projectId: string) => {
+        setActiveProjectId(projectId);
+    };
+
+    // Handlers (Task)
+    const handleAddTask = (taskData: Omit<Task, 'id' | 'status'>) => {
+        const newTask: Task = { ...taskData, id: uuidv4(), status: TaskStatus.ToDo };
+        setProjects(prevProjects => prevProjects.map(p =>
+            p.id === activeProjectId ? { ...p, tasks: [...p.tasks, newTask] } : p
+        ));
+        setIsAddTaskModalOpen(false);
     };
 
     const handleUpdateTaskStatus = (taskId: string, newStatus: TaskStatus) => {
-        updateProject(activeProjectId, { tasks: tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t) });
-    };
-
-    const handleAddSubtask = (taskId: string, subtaskText: string) => {
-        const newSubtask: Subtask = { id: uuidv4(), text: subtaskText, completed: false };
-        updateProject(activeProjectId, {
-            tasks: tasks.map(t =>
-                t.id === taskId ? { ...t, subtasks: [...(t.subtasks || []), newSubtask] } : t
-            )
-        });
-    };
-
-    const handleToggleSubtask = (taskId: string, subtaskId: string) => {
-        updateProject(activeProjectId, {
-            tasks: tasks.map(t =>
-                t.id === taskId ? {
-                    ...t,
-                    subtasks: (t.subtasks || []).map(st =>
-                        st.id === subtaskId ? { ...st, completed: !st.completed } : st
-                    )
-                } : t
-            )
-        });
+        setProjects(prev => prev.map(p => p.id === activeProjectId ? { ...p, tasks: p.tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t) } : p));
     };
     
+    const handleDeleteTask = (taskId: string) => {
+        if (window.confirm('Are you sure you want to delete this task?')) {
+            setProjects(prev => prev.map(p => p.id === activeProjectId ? { ...p, tasks: p.tasks.filter(t => t.id !== taskId) } : p));
+        }
+    };
+
     const handleUpdateTaskTime = (taskId: string, newTime: number) => {
-        updateProject(activeProjectId, { tasks: tasks.map(t => t.id === taskId ? { ...t, estimatedTime: newTime } : t) });
+        setProjects(prev => prev.map(p => p.id === activeProjectId ? { ...p, tasks: p.tasks.map(t => t.id === taskId ? { ...t, estimatedTime: newTime } : t) } : p));
     };
 
     const handleUpdateTaskPriority = (taskId: string, newPriority: Priority) => {
-        updateProject(activeProjectId, { tasks: tasks.map(t => t.id === taskId ? { ...t, priority: newPriority } : t) });
+        setProjects(prev => prev.map(p => p.id === activeProjectId ? { ...p, tasks: p.tasks.map(t => t.id === taskId ? { ...t, priority: newPriority } : t) } : p));
     };
-    
+
     const handleUpdateTaskDueDate = (taskId: string, newDueDate: string) => {
-        updateProject(activeProjectId, { tasks: tasks.map(t => t.id === taskId ? { ...t, dueDate: newDueDate } : t) });
-    };
-    
-    // PROJECT FILE HANDLERS
-    const handleAddFiles = async (fileList: FileList) => {
-        const targetProjectId = activeProjectId;
-        const currentProject = projects.find(p => p.id === targetProjectId);
-        if (!currentProject) return;
-
-        const collectedChanges = {
-            newFiles: new Map<string, ProjectFile>(),
-            replacements: new Map<string, ProjectFile>()
-        };
-
-        for (const file of Array.from(fileList)) {
-            const content = await fileToDataUrl(file);
-            const fileData = { id: uuidv4(), name: file.name, type: file.type, content };
-
-            const existingFile = currentProject.files.find(f => f.name === file.name);
-
-            if (existingFile) {
-                if (window.confirm(`A file named "${file.name}" already exists. Do you want to replace it?`)) {
-                    collectedChanges.replacements.set(file.name, { ...existingFile, content: fileData.content, type: file.type });
-                }
-            } else {
-                collectedChanges.newFiles.set(file.name, fileData);
-            }
-        }
-
-        if (collectedChanges.newFiles.size === 0 && collectedChanges.replacements.size === 0) return;
-
-        setProjects(prevProjects =>
-            prevProjects.map(project => {
-                if (project.id !== targetProjectId) {
-                    return project;
-                }
-
-                let updatedFiles = [...project.files];
-                
-                // Process replacements
-                collectedChanges.replacements.forEach((replacement, name) => {
-                    updatedFiles = updatedFiles.map(f => f.name === name ? replacement : f);
-                });
-                
-                // Process new files
-                updatedFiles.push(...Array.from(collectedChanges.newFiles.values()));
-
-                return { ...project, files: updatedFiles };
-            })
-        );
+        setProjects(prev => prev.map(p => p.id === activeProjectId ? { ...p, tasks: p.tasks.map(t => t.id === taskId ? { ...t, dueDate: newDueDate } : t) } : p));
     };
 
-
-    const handleDeleteFile = (fileId: string) => {
-        updateProject(activeProjectId, { files: files.filter(f => f.id !== fileId) });
+    // Handlers (Subtask)
+    const handleAddSubtask = (taskId: string, subtaskText: string) => {
+        const newSubtask: Subtask = { id: uuidv4(), text: subtaskText, completed: false };
+        setProjects(prev => prev.map(p => p.id === activeProjectId ? { ...p, tasks: p.tasks.map(t => t.id === taskId ? { ...t, subtasks: [...(t.subtasks || []), newSubtask] } : t) } : p));
     };
 
-    // AI HANDLERS
+    const handleToggleSubtask = (taskId: string, subtaskId: string) => {
+        setProjects(prev => prev.map(p => p.id === activeProjectId ? { ...p, tasks: p.tasks.map(t => t.id === taskId ? { ...t, subtasks: (t.subtasks || []).map(st => st.id === subtaskId ? { ...st, completed: !st.completed } : st) } : t) } : p));
+    };
+
+    // Handlers (AI Features)
     const handleOpenAIAssistant = (mode: AIAssistantMode, task: Task) => {
-        setAIAssistantMode(mode);
-        setAITargetTask(task);
         setAIContent(null);
+        setAIAssistantMode(mode);
+        setAIAssistantTask(task);
         setIsAIAssistantModalOpen(true);
-        if (mode === 'first-step') {
-            handleAIAssistantSubmit(task.title);
-        }
     };
-    
+
     const handleAIAssistantSubmit = async (topic: string) => {
-        setIsAILoading(true);
+        setIsLoadingAI(true);
         setAIContent(null);
         try {
+            let result;
             if (aiAssistantMode === 'breakdown') {
-                const subtasks = await breakdownTaskIntoSubtasks(topic);
-                setAIContent(subtasks);
+                result = await breakdownTaskIntoSubtasks(topic);
             } else if (aiAssistantMode === 'tips') {
-                const tips = await getLearningTipsForTopic(topic);
-                setAIContent(tips);
-            } else if (aiAssistantMode === 'first-step') {
-                const step = await getFirstStepForTask(topic);
-                setAIContent(step);
+                result = await getLearningTipsForTopic(topic);
+            } else { // 'first-step'
+                result = await getFirstStepForTask(topic);
             }
+            setAIContent(result);
         } catch (error) {
             console.error(error);
             setAIContent("Sorry, I couldn't generate a response. Please try again.");
         } finally {
-            setIsAILoading(false);
+            setIsLoadingAI(false);
         }
     };
 
     const handleAddSubtasksFromAI = (subtasks: string[]) => {
-        if (!aiTargetTask) return;
-        const newSubtasks: Subtask[] = subtasks.map(st => ({ id: uuidv4(), text: st, completed: false }));
-        updateProject(activeProjectId, {
-            tasks: tasks.map(t =>
-                t.id === aiTargetTask.id ? { ...t, subtasks: [...(t.subtasks || []), ...newSubtasks] } : t
-            )
-        });
+        if (!aiAssistantTask) return;
+        const newSubtasks: Subtask[] = subtasks.map(text => ({ id: uuidv4(), text, completed: false }));
+        setProjects(prev => prev.map(p => p.id === activeProjectId ? { ...p, tasks: p.tasks.map(t => t.id === aiAssistantTask.id ? { ...t, subtasks: [...(t.subtasks || []), ...newSubtasks] } : t) } : p));
         setIsAIAssistantModalOpen(false);
     };
-    
+
     const handleGenerateSprint = async (resources: Omit<LearningResource, 'id'>[], days: number) => {
-        setIsAILoading(true);
+        setIsLoadingAI(true);
         try {
-            const newTasks = await generateStudySprint(resources, days);
-            const sprintTasks: Task[] = newTasks.map(t => ({...t, id: uuidv4(), status: TaskStatus.ToDo }));
-            updateProject(activeProjectId, { tasks: [...tasks, ...sprintTasks]});
+            const sprintTasks = await generateStudySprint(resources, days);
+            const newTasks: Task[] = sprintTasks.map(taskData => ({
+                ...taskData,
+                id: uuidv4(),
+                status: TaskStatus.ToDo,
+            }));
+            setProjects(prev => prev.map(p => p.id === activeProjectId ? { ...p, tasks: [...p.tasks, ...newTasks] } : p));
             setIsSprintGeneratorOpen(false);
         } catch (error) {
-            console.error("Sprint generation failed:", error);
-            // In a real app, show this error in the modal.
+            console.error("Failed to generate and add sprint tasks:", error);
+            alert("An error occurred while generating the study sprint. Please check the console for details.");
         } finally {
-            setIsAILoading(false);
+            setIsLoadingAI(false);
         }
     };
     
     const handleGenerateFlashcards = async (files: File[], prompt: string) => {
-        setIsAILoading(true);
+        setIsLoadingAI(true);
         try {
-            const flashcards = await generateFlashcards(files, prompt);
-            setFlashcardsToStudy(flashcards);
-            setGeneratedFlashcardPrompt(prompt);
-            setIsViewingNewFlashcards(true);
-            setIsFlashcardGeneratorOpen(false);
-            setIsFlashcardViewerOpen(true);
+            const cards = await generateFlashcards(files, prompt);
+            setGeneratedFlashcards(cards); // Store generated cards
+            setFlashcardsToShow(cards); // Immediately show them
+            setIsFlashcardGeneratorOpen(false); // Close generator
+            setIsFlashcardsModalOpen(true); // Open viewer
         } catch (error) {
-            console.error("Flashcard generation failed:", error);
+            console.error("Failed to generate flashcards:", error);
+            alert("An error occurred while generating flashcards. Please check the console for details.");
         } finally {
-            setIsAILoading(false);
+            setIsLoadingAI(false);
         }
     };
 
-    const handleSaveFlashcardsAsTask = () => {
-        const flashcardTask: Task = {
-            id: uuidv4(),
-            title: `Flashcards: ${generatedFlashcardPrompt || 'Generated from files'}`,
-            description: `A set of ${flashcardsToStudy.length} flashcards generated by AI.`,
-            status: TaskStatus.ToDo,
-            priority: Priority.ImportantNotUrgent,
-            estimatedTime: 30,
-            flashcards: flashcardsToStudy,
-        };
-        updateProject(activeProjectId, { tasks: [...tasks, flashcardTask]});
-        setIsFlashcardViewerOpen(false);
-        setIsViewingNewFlashcards(false);
-    };
-
+    // Handlers (Flashcard Tasks)
     const handleOpenFlashcardTask = (flashcards: Flashcard[]) => {
-        setFlashcardsToStudy(flashcards);
-        setIsViewingNewFlashcards(false);
-        setIsFlashcardViewerOpen(true);
+        setGeneratedFlashcards([]); // Clear any newly generated cards
+        setFlashcardsToShow(flashcards);
+        setIsFlashcardsModalOpen(true);
     };
     
-    // SETTINGS & DATA
+    const handleSaveFlashcardsAsTask = () => {
+        if (generatedFlashcards.length === 0) return;
+        const newTaskData: Omit<Task, 'id' | 'status'> = {
+            title: "Study Flashcards",
+            description: `Review ${generatedFlashcards.length} AI-generated cards.`,
+            priority: Priority.ImportantNotUrgent,
+            estimatedTime: 30,
+            flashcards: generatedFlashcards,
+        };
+        handleAddTask(newTaskData);
+        setIsFlashcardsModalOpen(false);
+        setGeneratedFlashcards([]); // Clear after saving
+    };
+
+    // Handlers (Settings & Data)
     const handleClearAllData = () => {
-        if (window.confirm("Are you sure you want to delete ALL projects and data? This cannot be undone.")) {
+        if (window.confirm("Are you sure you want to delete ALL your projects and data? This action cannot be undone.")) {
             localStorage.removeItem('studyjam-projects');
             localStorage.removeItem('studyjam-active-project-id');
             const defaultProject = createDefaultProject();
@@ -330,72 +296,74 @@ const App: React.FC = () => {
         }
     };
     
-    // TIMER & PROJECT DATA
+    const handleImportTasks = (tasks: Omit<Task, 'id'>[]) => {
+        const newTasks: Task[] = tasks.map(taskData => ({
+            ...taskData,
+            id: uuidv4(),
+        }));
+        setProjects(prev => prev.map(p => p.id === activeProjectId ? { ...p, tasks: [...p.tasks, ...newTasks] } : p));
+        setIsImportModalOpen(false);
+    };
+
+    // Handlers (Sidebar Components)
     const handleTimerSettingsChange = (newSettings: TimerSettings) => {
-        updateProject(activeProjectId, { timerSettings: newSettings });
+        setProjects(prev => prev.map(p => p.id === activeProjectId ? { ...p, timerSettings: newSettings } : p));
     };
 
     const handlePomodorosChange = (newCount: number) => {
-        updateProject(activeProjectId, { pomodoros: newCount });
-    };
-    
-    const handleBrainDumpChange = useCallback((notes: string) => {
-        updateProject(activeProjectId, { brainDump: notes });
-    }, [activeProjectId, projects]); // Updated dependency to reflect correct closure
-    
-    // GOOGLE SHEETS IMPORT
-    const handleImportFromSheet = (importedTasks: Omit<Task, 'id'>[]) => {
-        const newTasks: Task[] = importedTasks.map(t => ({ ...t, id: uuidv4() }));
-        updateProject(activeProjectId, { tasks: [...tasks, ...newTasks] });
-        setIsImportModalOpen(false);
-    };
-    
-    // PROJECT MANAGEMENT
-    const handleAddProject = (name: string) => {
-        const newProject: Project = {
-            id: uuidv4(),
-            name,
-            tasks: [],
-            timerSettings: DEFAULT_TIMER_SETTINGS,
-            pomodoros: 0,
-            brainDump: '',
-            files: [],
-        };
-        setProjects(prev => [...prev, newProject]);
-        setActiveProjectId(newProject.id);
-        setIsProjectManagerOpen(false);
+        setProjects(prev => prev.map(p => p.id === activeProjectId ? { ...p, pomodoros: newCount } : p));
     };
 
-    const handleRenameProject = (projectId: string, newName: string) => {
-        setProjects(prev => prev.map(p => p.id === projectId ? { ...p, name: newName } : p));
+    const handleBrainDumpChange = (notes: string) => {
+        setProjects(prev => prev.map(p => p.id === activeProjectId ? { ...p, brainDump: notes } : p));
     };
 
-    const handleDeleteProject = (projectId: string) => {
-        if (projects.length <= 1) {
-            alert("You cannot delete the only project.");
-            return;
-        }
-        const projectToDelete = projects.find(p => p.id === projectId);
-        if (window.confirm(`Are you sure you want to delete the "${projectToDelete?.name}" project?`)) {
-            const currentProjects = projects;
-            const newProjects = currentProjects.filter(p => p.id !== projectId);
-            
-            if (activeProjectId === projectId) {
-                const deletedIndex = currentProjects.findIndex(p => p.id === projectId);
-                const newActiveIndex = Math.max(0, deletedIndex - 1);
-                setActiveProjectId(newProjects[newActiveIndex]?.id || '');
+    // Handlers (Project Files)
+    const handleAddFiles = async (files: FileList) => {
+        const currentFiles = activeProject.files || [];
+        const existingFileNames = new Set(currentFiles.map(f => f.name));
+
+        const filesToProcess = Array.from(files);
+
+        for (const file of filesToProcess) {
+            let proceed = true;
+            if (existingFileNames.has(file.name)) {
+                proceed = window.confirm(`A file named "${file.name}" already exists. Do you want to replace it?`);
             }
-            setProjects(newProjects);
+            if (proceed) {
+                try {
+                    const content = await fileToDataUrl(file);
+                    const newFile: ProjectFile = { id: uuidv4(), name: file.name, type: file.type, content };
+                    
+                    setProjects(prevProjects => {
+                        return prevProjects.map(p => {
+                            if (p.id === activeProjectId) {
+                                const updatedFiles = p.files ? p.files.filter(f => f.name !== file.name) : [];
+                                return { ...p, files: [...updatedFiles, newFile] };
+                            }
+                            return p;
+                        });
+                    });
+                } catch (error) {
+                    console.error(`Failed to process file ${file.name}:`, error);
+                }
+            }
         }
+    };
+    
+    const handleDeleteFile = (fileId: string) => {
+        setProjects(prev => prev.map(p =>
+            p.id === activeProjectId ? { ...p, files: (p.files || []).filter(f => f.id !== fileId) } : p
+        ));
     };
 
 
     return (
-        <div className="bg-jam-light-gray dark:bg-slate-900 min-h-screen font-sans text-jam-dark dark:text-slate-300">
+        <div className="min-h-screen light-theme dark:dark-theme">
             <Header
                 activeProject={activeProject}
                 projects={projects}
-                onSwitchProject={setActiveProjectId}
+                onSwitchProject={handleSwitchProject}
                 onOpenProjectManager={() => setIsProjectManagerOpen(true)}
                 onAddTask={() => setIsAddTaskModalOpen(true)}
                 onOpenSprintGenerator={() => setIsSprintGeneratorOpen(true)}
@@ -403,14 +371,12 @@ const App: React.FC = () => {
                 onOpenImportModal={() => setIsImportModalOpen(true)}
                 onOpenSettings={() => setIsSettingsModalOpen(true)}
             />
-            
             <LearningTipBar />
-
-            <main className="container mx-auto p-4 sm:p-6 lg:p-8">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
-                    <div className="lg:col-span-2">
-                        {tasks && <KanbanBoard
-                            tasks={tasks}
+            <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+                    <div className="lg:col-span-3">
+                         <KanbanBoard
+                            tasks={activeProject?.tasks || []}
                             onUpdateTaskStatus={handleUpdateTaskStatus}
                             onDeleteTask={handleDeleteTask}
                             onAddSubtask={handleAddSubtask}
@@ -420,73 +386,37 @@ const App: React.FC = () => {
                             onUpdateTaskDueDate={handleUpdateTaskDueDate}
                             onOpenAIAssistant={handleOpenAIAssistant}
                             onOpenFlashcardTask={handleOpenFlashcardTask}
-                        />}
+                        />
                     </div>
-                    <aside className="space-y-6">
-                        {timerSettings && <Timer
-                            settings={timerSettings}
-                            pomodoros={pomodoros}
+                    <aside className="space-y-8">
+                        <Timer
+                            settings={activeProject?.timerSettings || DEFAULT_TIMER_SETTINGS}
+                            pomodoros={activeProject?.pomodoros || 0}
                             onSettingsChange={handleTimerSettingsChange}
                             onPomodorosChange={handlePomodorosChange}
-                        />}
-                         <ProjectFiles
-                            files={files}
+                        />
+                         <ProjectFiles 
+                            files={activeProject?.files || []}
                             onAddFiles={handleAddFiles}
                             onDeleteFile={handleDeleteFile}
                         />
-                        {brainDump !== undefined && <BrainDump
-                            notes={brainDump}
+                        <BrainDump
+                            notes={activeProject?.brainDump || ''}
                             onNotesChange={handleBrainDumpChange}
-                        />}
+                        />
                     </aside>
                 </div>
             </main>
 
             {/* Modals */}
             {isAddTaskModalOpen && <AddTaskModal onClose={() => setIsAddTaskModalOpen(false)} onAddTask={handleAddTask} />}
-            {isAIAssistantModalOpen && <AIAssistantModal 
-                isOpen={isAIAssistantModalOpen}
-                onClose={() => setIsAIAssistantModalOpen(false)}
-                mode={aiAssistantMode}
-                task={aiTargetTask}
-                isLoading={isAILoading}
-                content={aiContent}
-                onSubmit={handleAIAssistantSubmit}
-                onAddSubtasks={handleAddSubtasksFromAI}
-            />}
+            {isAIAssistantModalOpen && <AIAssistantModal isOpen={isAIAssistantModalOpen} onClose={() => setIsAIAssistantModalOpen(false)} mode={aiAssistantMode} task={aiAssistantTask} isLoading={isLoadingAI} content={aiContent} onSubmit={handleAIAssistantSubmit} onAddSubtasks={handleAddSubtasksFromAI} />}
             {isSettingsModalOpen && <SettingsModal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} onClearAllData={handleClearAllData} />}
-            {isSprintGeneratorOpen && <LearningResourcesModal 
-                isOpen={isSprintGeneratorOpen} 
-                onClose={() => setIsSprintGeneratorOpen(false)} 
-                onGenerate={handleGenerateSprint} 
-                isLoading={isAILoading}
-                projectFiles={files}
-            />}
-            {isFlashcardGeneratorOpen && <FileManagerModal 
-                isOpen={isFlashcardGeneratorOpen} 
-                onClose={() => setIsFlashcardGeneratorOpen(false)} 
-                onGenerate={handleGenerateFlashcards} 
-                isLoading={isAILoading}
-                projectFiles={files}
-            />}
-            {isFlashcardViewerOpen && <FlashcardsModal 
-                isOpen={isFlashcardViewerOpen} 
-                onClose={() => {
-                    setIsFlashcardViewerOpen(false)
-                    setIsViewingNewFlashcards(false)
-                }} 
-                flashcards={flashcardsToStudy} 
-                onSave={isViewingNewFlashcards ? handleSaveFlashcardsAsTask : undefined}
-            />}
-            {isImportModalOpen && <ImportFromSheetModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} onImport={handleImportFromSheet} />}
-            {isProjectManagerOpen && <ProjectManager 
-                isOpen={isProjectManagerOpen}
-                onClose={() => setIsProjectManagerOpen(false)}
-                projects={projects}
-                onAddProject={handleAddProject}
-                onRenameProject={handleRenameProject}
-                onDeleteProject={handleDeleteProject}
-            />}
+            {isSprintGeneratorOpen && <LearningResourcesModal isOpen={isSprintGeneratorOpen} onClose={() => setIsSprintGeneratorOpen(false)} onGenerate={handleGenerateSprint} isLoading={isLoadingAI} projectFiles={activeProject?.files || []} />}
+            {isFlashcardGeneratorOpen && <FileManagerModal isOpen={isFlashcardGeneratorOpen} onClose={() => setIsFlashcardGeneratorOpen(false)} onGenerate={handleGenerateFlashcards} isLoading={isLoadingAI} projectFiles={activeProject?.files || []} />}
+            {isFlashcardsModalOpen && <FlashcardsModal isOpen={isFlashcardsModalOpen} onClose={() => setIsFlashcardsModalOpen(false)} flashcards={flashcardsToShow} onSave={generatedFlashcards.length > 0 ? handleSaveFlashcardsAsTask : undefined} />}
+            {isImportModalOpen && <ImportFromSheetModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} onImport={handleImportTasks} />}
+            {isProjectManagerOpen && <ProjectManager isOpen={isProjectManagerOpen} onClose={() => setIsProjectManagerOpen(false)} projects={projects} onAddProject={handleAddProject} onRenameProject={handleRenameProject} onDeleteProject={handleDeleteProject} />}
         </div>
     );
 };

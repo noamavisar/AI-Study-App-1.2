@@ -187,9 +187,20 @@ export async function generateFlashcards(files: File[], prompt: string): Promise
         
         **Language and Formatting Instructions:**
         - The primary language for all questions and answers MUST be Hebrew.
-        - Use English and LaTeX notation ONLY for mathematical formulas, equations, or specific technical terms that do not have a standard Hebrew equivalent. For example, use LaTeX for something like an integral: $\\int_{a}^{b} f(x) dx$.
+        - Use English and LaTeX notation ONLY for mathematical formulas, equations, or specific technical terms.
+        
+        **CRITICAL - LaTeX Formatting Rules. Follow these exactly:**
+        1.  **DELIMITERS:** ALL LaTeX code, including single variables, MUST be correctly enclosed in '$' delimiters. For example, use '$x^2$' not 'x^2'. Use \`$$ ... $$\` for display math.
+        2.  **VALIDITY:** Use only standard, valid LaTeX commands. For fractions, you MUST use \`\\frac{numerator}{denominator}\`. For text inside math, you MUST use \`\\text{...}\`. Do not invent or misspell commands.
+        3.  **EXAMPLES:**
+            -   **GOOD:** The price is $P=100$.
+            -   **BAD:** The price is P=100$. (Missing opening '$')
+            -   **GOOD:** The formula is $a^2 + b^2 = c^2$.
+            -   **BAD:** The formula is a^2 + b^2 = c^2. (Missing all '$')
 
         User's focus: "${prompt}"
+
+        Before finalizing your JSON output, double-check every question and answer to ensure all LaTeX delimiters are perfectly balanced and correctly placed. Errors in LaTeX formatting will make the flashcards unusable.
         
         Generate the flashcards in a structured JSON format.`;
 
