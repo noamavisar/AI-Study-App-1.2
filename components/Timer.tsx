@@ -89,9 +89,9 @@ const Timer: React.FC<TimerProps> = ({ settings, pomodoros, onSettingsChange, on
   };
   
   const progressCircleStyles = {
-    pomodoro: 'text-jam-pink',
-    shortBreak: 'text-jam-green',
-    longBreak: 'text-jam-blue',
+    pomodoro: 'text-jam-dark dark:text-pink-500',
+    shortBreak: 'text-green-500 dark:text-green-400',
+    longBreak: 'text-blue-500 dark:text-blue-400',
   }
 
   const radius = 50;
@@ -101,7 +101,7 @@ const Timer: React.FC<TimerProps> = ({ settings, pomodoros, onSettingsChange, on
   const offset = circumference - progress * circumference;
 
   return (
-    <div className="p-6 rounded-lg shadow-lg border border-jam-border dark:border-slate-700 bg-white dark:bg-slate-800 relative">
+    <div className="p-6 rounded-lg shadow-lg border border-jam-border dark:border-slate-800 bg-jam-light-gray/80 dark:bg-slate-900/80 backdrop-blur-sm relative">
       <button onClick={() => setIsSettingsOpen(!isSettingsOpen)} className="absolute top-4 right-4 text-slate-400 hover:text-jam-dark dark:hover:text-slate-200 transition-colors" aria-label="Timer settings">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
             <path fillRule="evenodd" d="M11.078 2.25c-.217 0-.424.04-.622.116l-6.25 2.5A.75.75 0 0 0 3.75 5.5v6.528a.75.75 0 0 0 .406.684l6.25 2.5a.75.75 0 0 0 .688 0l6.25-2.5a.75.75 0 0 0 .406-.684V5.5a.75.75 0 0 0-.406-.684l-6.25-2.5a.75.75 0 0 0-.622-.116ZM12.25 5.168l-4.5 1.8a.75.75 0 0 0 0 1.364l4.5 1.8a.75.75 0 0 0 1-1.364l-4.5-1.8a.75.75 0 0 0-1 1.364l4.5 1.8a.75.75 0 0 0 1-1.364l-4.5-1.8a.75.75 0 0 0-1 1.364l4.5 1.8a.75.75 0 0 0 1-1.364V5.168a.75.75 0 0 0-1.5 0v.001Z" clipRule="evenodd" />

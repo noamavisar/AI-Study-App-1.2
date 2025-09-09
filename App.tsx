@@ -62,6 +62,14 @@ const App: React.FC = () => {
         const savedId = localStorage.getItem('studyjam-active-project-id');
         return savedId || DEFAULT_PROJECT_ID;
     });
+    
+    const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+        const savedTheme = localStorage.getItem('studyjam-theme');
+        if (savedTheme === 'light' || savedTheme === 'dark') {
+            return savedTheme;
+        }
+        return 'dark'; // Default to dark mode
+    });
 
     const activeProject = projects.find(p => p.id === activeProjectId) || projects[0];
     
@@ -90,6 +98,15 @@ const App: React.FC = () => {
     useEffect(() => {
         localStorage.setItem('studyjam-active-project-id', activeProjectId);
     }, [activeProjectId]);
+    
+    // Theme effect
+    useEffect(() => {
+        const root = window.document.documentElement;
+        root.classList.remove('light', 'dark');
+        root.classList.add(theme);
+        localStorage.setItem('studyjam-theme', theme);
+    }, [theme]);
+
 
     // Modal States
     const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
@@ -110,6 +127,10 @@ const App: React.FC = () => {
     const [aiContent, setAIContent] = useState<string | string[] | null>(null);
     const [generatedFlashcards, setGeneratedFlashcards] = useState<Flashcard[]>([]);
 
+    // Theme handler
+    const handleToggleTheme = () => {
+        setTheme(prevTheme => prevTheme === 'dark' ? 'light' : 'dark');
+    };
 
     // Handlers (Project)
     const handleAddProject = (name: string) => {
@@ -377,7 +398,7 @@ const App: React.FC = () => {
 
 
     return (
-        <div className="min-h-screen light-theme dark:dark-theme">
+        <div className="min-h-screen">
             <Header
                 activeProject={activeProject}
                 projects={projects}
@@ -389,6 +410,8 @@ const App: React.FC = () => {
                 onOpenImportModal={() => setIsImportModalOpen(true)}
                 onOpenProjectFilesModal={() => setIsProjectFilesModalOpen(true)}
                 onOpenSettings={() => setIsSettingsModalOpen(true)}
+                theme={theme}
+                onToggleTheme={handleToggleTheme}
             />
             <LearningTipBar />
             <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">

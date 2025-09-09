@@ -23,8 +23,6 @@ const getDateStatus = (dueDateString?: string) => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        // Input type="date" provides 'YYYY-MM-DD'. To avoid timezone issues,
-        // parse it as UTC by creating the date from parts.
         const parts = dueDateString.split('-').map(p => parseInt(p, 10));
         const dueDate = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
 
@@ -122,13 +120,18 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onDeleteTask, onAddSubtask, o
   const totalSubtasks = (task.subtasks || []).length;
   const progress = totalSubtasks > 0 ? (completedSubtasks / totalSubtasks) * 100 : 0;
   
+  const topBorderColorClass =
+    dateStatus === 'overdue' ? 'border-t-red-500' :
+    dateStatus === 'today' ? 'border-t-green-500' :
+    (dateStatus === 'upcoming' && sharedDateColor) ? sharedDateColor :
+    'border-t-transparent';
+
   const cardClasses = [
-    'p-4 rounded-lg shadow-md border-l-4 transition-shadow hover:shadow-lg cursor-grab active:cursor-grabbing',
+    'p-4 rounded-lg shadow-md border-l-4 border-t-4 transition-shadow hover:shadow-lg cursor-grab active:cursor-grabbing',
+    'border-r-transparent border-b-transparent', // Explicitly make other borders transparent
     priorityConfig.bg,
-    'border-jam-dark/20 dark:border-white/20',
-    dateStatus === 'overdue' ? 'border-t-4 border-t-red-500' : '',
-    dateStatus === 'today' ? 'border-t-4 border-t-green-500' : '',
-    dateStatus === 'upcoming' && sharedDateColor ? `border-t-4 ${sharedDateColor}` : '',
+    priorityConfig.border, // This will be like 'border-l-green-500'
+    topBorderColorClass,
   ].filter(Boolean).join(' ');
 
   return (
