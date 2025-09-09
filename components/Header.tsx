@@ -11,6 +11,7 @@ interface HeaderProps {
   onOpenSprintGenerator: () => void;
   onOpenFlashcardGenerator: () => void;
   onOpenImportModal: () => void;
+  onOpenProjectFilesModal: () => void;
   onOpenSettings: () => void;
 }
 
@@ -46,6 +47,14 @@ const Header: React.FC<HeaderProps> = (props) => {
             >
               <span role="img" aria-label="cards">🃏</span>
               <span>AI Flashcards</span>
+            </button>
+            <button
+              onClick={props.onOpenProjectFilesModal}
+              className="hidden md:flex items-center space-x-2 px-3 py-1.5 text-sm font-semibold text-jam-dark dark:text-slate-200 bg-white dark:bg-slate-800 rounded-lg border border-jam-border dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+              title="Manage Project Files"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path d="M3.75 2a.75.75 0 0 0-.75.75v14.5a.75.75 0 0 0 .75.75h12.5a.75.75 0 0 0 .75-.75V8.25a.75.75 0 0 0-.75-.75h-5a.75.75 0 0 1-.75-.75V2a.75.75 0 0 0-.75-.75H3.75Z" /></svg>
+                <span>Project Files</span>
             </button>
              <button
               onClick={props.onOpenImportModal}

@@ -17,7 +17,7 @@ import FlashcardsModal from './components/FlashcardsModal';
 import FileManagerModal from './components/FileManagerModal'; // This is the flashcard generator
 import ImportFromSheetModal from './components/ImportFromSheetModal';
 import ProjectManager from './components/ProjectManager';
-import ProjectFiles from './components/ProjectFiles';
+import ProjectFilesModal from './components/ProjectFilesModal';
 
 
 // Default values
@@ -103,6 +103,7 @@ const App: React.FC = () => {
     const [flashcardsToShow, setFlashcardsToShow] = useState<Flashcard[]>([]);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [isProjectManagerOpen, setIsProjectManagerOpen] = useState(false);
+    const [isProjectFilesModalOpen, setIsProjectFilesModalOpen] = useState(false);
     
     // AI State
     const [isLoadingAI, setIsLoadingAI] = useState(false);
@@ -320,34 +321,51 @@ const App: React.FC = () => {
 
     // Handlers (Project Files)
     const handleAddFiles = async (files: FileList) => {
-        const currentFiles = activeProject.files || [];
-        const existingFileNames = new Set(currentFiles.map(f => f.name));
-
+        const targetProjectId = activeProjectId; // Capture the ID at the start
         const filesToProcess = Array.from(files);
+
+        // This function needs to be robust against stale state.
+        // Process all files and confirmations first, then update state once.
+        let changes: { fileToAdd?: ProjectFile, fileToRemove?: string }[] = [];
 
         for (const file of filesToProcess) {
             let proceed = true;
-            if (existingFileNames.has(file.name)) {
+            // Check against the *current* state for duplicates.
+            const currentProject = projects.find(p => p.id === targetProjectId);
+            const currentFiles = currentProject?.files || [];
+            if (currentFiles.some(f => f.name === file.name)) {
                 proceed = window.confirm(`A file named "${file.name}" already exists. Do you want to replace it?`);
             }
             if (proceed) {
                 try {
                     const content = await fileToDataUrl(file);
                     const newFile: ProjectFile = { id: uuidv4(), name: file.name, type: file.type, content };
-                    
-                    setProjects(prevProjects => {
-                        return prevProjects.map(p => {
-                            if (p.id === activeProjectId) {
-                                const updatedFiles = p.files ? p.files.filter(f => f.name !== file.name) : [];
-                                return { ...p, files: [...updatedFiles, newFile] };
-                            }
-                            return p;
-                        });
-                    });
+                    // If we're replacing, mark the old one for removal.
+                    changes.push({ fileToRemove: file.name, fileToAdd: newFile });
                 } catch (error) {
                     console.error(`Failed to process file ${file.name}:`, error);
                 }
             }
+        }
+        
+        if (changes.length > 0) {
+            setProjects(prevProjects => {
+                return prevProjects.map(p => {
+                    if (p.id === targetProjectId) {
+                        let updatedFiles = [...(p.files || [])];
+                        for (const change of changes) {
+                            if (change.fileToRemove) {
+                                updatedFiles = updatedFiles.filter(f => f.name !== change.fileToRemove);
+                            }
+                            if (change.fileToAdd) {
+                                updatedFiles.push(change.fileToAdd);
+                            }
+                        }
+                        return { ...p, files: updatedFiles };
+                    }
+                    return p;
+                });
+            });
         }
     };
     
@@ -369,6 +387,7 @@ const App: React.FC = () => {
                 onOpenSprintGenerator={() => setIsSprintGeneratorOpen(true)}
                 onOpenFlashcardGenerator={() => setIsFlashcardGeneratorOpen(true)}
                 onOpenImportModal={() => setIsImportModalOpen(true)}
+                onOpenProjectFilesModal={() => setIsProjectFilesModalOpen(true)}
                 onOpenSettings={() => setIsSettingsModalOpen(true)}
             />
             <LearningTipBar />
@@ -395,11 +414,6 @@ const App: React.FC = () => {
                             onSettingsChange={handleTimerSettingsChange}
                             onPomodorosChange={handlePomodorosChange}
                         />
-                         <ProjectFiles 
-                            files={activeProject?.files || []}
-                            onAddFiles={handleAddFiles}
-                            onDeleteFile={handleDeleteFile}
-                        />
                         <BrainDump
                             notes={activeProject?.brainDump || ''}
                             onNotesChange={handleBrainDumpChange}
@@ -417,6 +431,7 @@ const App: React.FC = () => {
             {isFlashcardsModalOpen && <FlashcardsModal isOpen={isFlashcardsModalOpen} onClose={() => setIsFlashcardsModalOpen(false)} flashcards={flashcardsToShow} onSave={generatedFlashcards.length > 0 ? handleSaveFlashcardsAsTask : undefined} />}
             {isImportModalOpen && <ImportFromSheetModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} onImport={handleImportTasks} />}
             {isProjectManagerOpen && <ProjectManager isOpen={isProjectManagerOpen} onClose={() => setIsProjectManagerOpen(false)} projects={projects} onAddProject={handleAddProject} onRenameProject={handleRenameProject} onDeleteProject={handleDeleteProject} />}
+            {isProjectFilesModalOpen && <ProjectFilesModal isOpen={isProjectFilesModalOpen} onClose={() => setIsProjectFilesModalOpen(false)} files={activeProject?.files || []} onAddFiles={handleAddFiles} onDeleteFile={handleDeleteFile} />}
         </div>
     );
 };
