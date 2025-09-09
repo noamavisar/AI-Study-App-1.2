@@ -1,5 +1,4 @@
-// Fix: Define enums directly in this file to break the circular dependency with constants.ts.
-// The enums were implicitly defined by their usage in constants.ts but were not declared anywhere.
+
 export enum TaskStatus {
   ToDo = 'To Do',
   InProgress = 'In Progress',
@@ -14,10 +13,12 @@ export enum Priority {
 }
 
 export enum ResourceType {
-  LearningMaterial = 'Learning Material',
-  CourseExercises = 'Course Exercises',
-  OldTest = 'Old Test',
+    LearningMaterial = 'Learning Material',
+    CourseExercises = 'Course Exercises',
+    OldTest = 'Old Test',
 }
+
+export type AIAssistantMode = 'breakdown' | 'tips';
 
 export interface Subtask {
   id: string;
@@ -31,10 +32,19 @@ export interface Flashcard {
 }
 
 export interface ProjectFile {
-  id: string;
-  name: string;
-  type: string;
-  content: string; // Data URL
+    id: string;
+    name: string;
+    type: string; // MIME type for local, or a marker for links
+    size: number; // in bytes
+    sourceType: 'local' | 'link';
+    dataUrl?: string; // base64 for local files
+    url?: string; // URL for link files
+}
+
+export interface TimerSettings {
+    pomodoro: number;
+    shortBreak: number;
+    longBreak: number;
 }
 
 export interface Task {
@@ -44,32 +54,18 @@ export interface Task {
   status: TaskStatus;
   priority: Priority;
   estimatedTime: number; // in minutes
-  dueDate?: string; // e.g., '2024-12-31'
   subtasks?: Subtask[];
   flashcards?: Flashcard[];
-  day?: number; // for study sprints
-}
-
-export interface LearningResource {
-    id: string;
-    file: File;
-    type: ResourceType;
-}
-
-export interface TimerSettings {
-    pomodoro: number;
-    shortBreak: number;
-    longBreak: number;
+  day?: number; // For AI-generated sprint tasks
+  dueDate?: string; // YYYY-MM-DD format
 }
 
 export interface Project {
   id: string;
   name: string;
   tasks: Task[];
+  brainDumpNotes: string;
   timerSettings: TimerSettings;
   pomodoros: number;
-  brainDump: string;
   files: ProjectFile[];
 }
-
-export type AIAssistantMode = 'breakdown' | 'tips' | 'first-step';

@@ -1,246 +1,175 @@
-import { GoogleGenAI, Type } from "@google/genai";
-import { LearningResource, Priority, Task, Flashcard } from '../types';
 
-const API_KEY = process.env.API_KEY;
+import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
+import { Task, ResourceType, Flashcard, ProjectFile } from '../types';
 
-if (!API_KEY) {
-  // A more user-friendly error could be shown in the UI
-  throw new Error("API_KEY environment variable not set.");
-}
+// In a real environment, this is provided externally.
+const API_KEY = process.env.API_KEY as string;
 
 const ai = new GoogleGenAI({ apiKey: API_KEY });
 
-async function fileToGenerativePart(file: File): Promise<{ mimeType: string, data: string }> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => {
-        const result = reader.result as string;
-        const parts = result.split(';base64,');
-        if (parts.length !== 2) {
-            return reject(new Error('Malformed data URL.'));
-        }
-        const mimeType = parts[0].split(':')[1];
-        const data = parts[1];
-        resolve({ mimeType, data });
+const fileToGenerativePart = async (file: File) => {
+    const base64EncodedData = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+
+    return {
+        inlineData: {
+            mimeType: file.type,
+            data: base64EncodedData,
+        },
     };
-    reader.onerror = error => reject(error);
-  });
-}
+};
 
-export async function getFirstStepForTask(taskTitle: string): Promise<string> {
-    try {
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: `The user is struggling with procrastination on the following task: "${taskTitle}". Generate a single, concrete, and extremely easy first step to help them get started. This step should take less than 5 minutes to complete. The response should be a single sentence. For example: "Open your textbook to page 54 and read the first paragraph." or "Create a new blank document and title it 'Essay Outline'."`,
-        });
-        return response.text.trim();
-    } catch (error) {
-        console.error("Error calling Gemini API for first step generation:", error);
-        throw new Error("Failed to generate a first step from AI.");
-    }
-}
+export async function generateStudySprint(
+    topic: string,
+    duration: number,
+    resources: ResourceType[],
+    files: File[],
+    linkFiles: ProjectFile[]
+): Promise<Omit<Task, 'id' | 'status' | 'priority' | 'estimatedTime'>[]> {
+    const model = 'gemini-2.5-flash';
+    const resourceText = resources.length > 0 ? `focusing on these resource types: ${resources.join(', ')}` : '';
+    const linkText = linkFiles.length > 0
+        ? `The user has also provided the following online resources (do not access them, just use their names for context): ${linkFiles.map(f => `"${f.name}" at ${f.url}`).join(', ')}.`
+        : '';
 
+    const textPart = {
+        text: `Create a detailed, day-by-day study plan for the topic "${topic}". The plan should span ${duration} days.
+The user's goal is to be well-prepared for a test at the end of this period.
+${resourceText}
+${linkText}
+The user has provided file(s) as study material. Use their content to generate a relevant and specific study plan.
+For each day, create a list of tasks. Each task must have a "title" and a "description".
+The description should be concise and actionable.
+IMPORTANT: Respond with ONLY a JSON object in the specified format. Do not include any other text, markdown, or explanation.
+`,
+    };
 
-export async function breakdownTaskIntoSubtasks(topic: string): Promise<string[]> {
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: `Break down the study topic "${topic}" into smaller, actionable sub-tasks. Each sub-task should be a concise to-do item.`,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            subtasks: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.STRING,
-                description: 'A single, concise study sub-task.',
-              },
-            },
-          },
-          required: ["subtasks"],
-        },
-      },
-    });
+    const fileParts = await Promise.all(files.map(fileToGenerativePart));
 
-    const jsonText = response.text.trim();
-    const result = JSON.parse(jsonText);
-    
-    if (result && Array.isArray(result.subtasks)) {
-      return result.subtasks;
-    } else {
-      console.error("Unexpected JSON structure:", result);
-      return ["Failed to parse subtasks from AI response."];
-    }
-
-  } catch (error) {
-    console.error("Error calling Gemini API for task breakdown:", error);
-    throw new Error("Failed to generate sub-tasks from AI.");
-  }
-}
-
-export async function getLearningTipsForTopic(topic: string): Promise<string> {
-    try {
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: `As a learning science expert, provide three actionable learning optimization tips for the topic: "${topic}". Focus on techniques like active recall, spaced repetition, or the Feynman technique. Format the response as a markdown bulleted list.`,
-            config: {
-                temperature: 0.7,
-            },
-        });
-
-        return response.text;
-    } catch (error) {
-        console.error("Error calling Gemini API for learning tips:", error);
-        throw new Error("Failed to get learning tips from AI.");
-    }
-}
-
-export async function generateStudySprint(resources: Omit<LearningResource, 'id'>[], days: number): Promise<Omit<Task, 'id' | 'status'>[]> {
-  try {
-    const fileParts = await Promise.all(
-        resources.map(async (resource) => {
-            const part = await fileToGenerativePart(resource.file);
-            return [
-                { text: `Input File: ${resource.file.name} (Category: ${resource.type})` },
-                { inlineData: part }
-            ];
-        })
-    ).then(parts => parts.flat());
-    
-    const prompt = `You are an expert academic coach. Your task is to create a detailed study sprint plan based on the provided learning materials.
-The user has ${days} days until their exam.
-The provided files are categorized as 'Learning Material' (theory), 'Course Exercises' (practice), and 'Old Test'.
-
-Please generate a study plan with the following structure:
-1. For each major topic found in the learning materials, create a sequence of tasks:
-   a. A task for a 'Quick Recap' of the theory from the 'Learning Material' files.
-   b. A task for solving a few 'Core Exercises' from the 'Course Exercises' files to grasp the main ideas.
-   c. A task for practicing with 'Real Test Questions' from older 'Old Test' files related to that topic.
-2. After all topics are covered, schedule the remaining days for solving full tests.
-   a. Prioritize using newer tests (if discernable from filename or content) for the final days.
-   b. Schedule 1-2 full tests per day.
-   c. Use older tests for topic-specific practice if needed.
-3. For each task, provide a title, a short description, an estimated time in minutes, a priority level, and the suggested day number (from 1 to ${days}).
-
-Analyze the provided files to identify topics, exercises, and test questions. Create a list of tasks in JSON format.`;
+    const contents = { parts: [textPart, ...fileParts] };
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: [{ parts: [{text: prompt}, ...fileParts] }],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            tasks: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  title: { type: Type.STRING },
-                  description: { type: Type.STRING },
-                  estimatedTime: { type: Type.NUMBER, description: 'Estimated time in minutes' },
-                  priority: { type: Type.STRING, enum: Object.values(Priority) },
-                  day: { type: Type.NUMBER, description: `Suggested day in the sprint (1-${days}) to perform the task` }
-                },
-                required: ['title', 'description', 'estimatedTime', 'priority', 'day']
-              }
-            }
-          },
-          required: ['tasks']
-        },
-      },
-    });
-
-    const jsonText = response.text.trim();
-    const result = JSON.parse(jsonText);
-
-    if (result && Array.isArray(result.tasks)) {
-      return result.tasks;
-    } else {
-      console.error("Unexpected JSON structure from Gemini for sprint plan:", result);
-      return [];
-    }
-
-  } catch (error) {
-    console.error("Error calling Gemini API for study sprint generation:", error);
-    throw new Error("Failed to generate study sprint from AI.");
-  }
-}
-
-export async function generateFlashcards(files: File[], prompt: string): Promise<Flashcard[]> {
-    try {
-        const fileParts = await Promise.all(
-            files.map(async (file) => {
-                const part = await fileToGenerativePart(file);
-                return [
-                    { text: `Input File: ${file.name}` },
-                    { inlineData: part }
-                ];
-            })
-        ).then(parts => parts.flat());
-
-        const fullPrompt = `Based on the provided study materials and the user's focus, generate a set of flashcards. Each flashcard should have a clear 'question' on one side and a concise 'answer' on the other.
-        
-        **Language and Formatting Instructions:**
-        - The primary language for all questions and answers MUST be Hebrew.
-        - Use English and LaTeX notation ONLY for mathematical formulas, equations, or specific technical terms.
-        
-        **CRITICAL - LaTeX Formatting Rules. Follow these exactly:**
-        1.  **DELIMITERS:** ALL LaTeX code, including single variables, MUST be correctly enclosed in '$' delimiters. For example, use '$x^2$' not 'x^2'. Use \`$$ ... $$\` for display math.
-        2.  **VALIDITY:** Use only standard, valid LaTeX commands. For fractions, you MUST use \`\\frac{numerator}{denominator}\`. For text inside math, you MUST use \`\\text{...}\`. Do not invent or misspell commands.
-        3.  **EXAMPLES:**
-            -   **GOOD:** The price is $P=100$.
-            -   **BAD:** The price is P=100$. (Missing opening '$')
-            -   **GOOD:** The formula is $a^2 + b^2 = c^2$.
-            -   **BAD:** The formula is a^2 + b^2 = c^2. (Missing all '$')
-
-        User's focus: "${prompt}"
-
-        Before finalizing your JSON output, double-check every question and answer to ensure all LaTeX delimiters are perfectly balanced and correctly placed. Errors in LaTeX formatting will make the flashcards unusable.
-        
-        Generate the flashcards in a structured JSON format.`;
-
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: [{ parts: [{text: fullPrompt}, ...fileParts] }],
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
+        model,
+        contents: [contents], // Wrap in an array for multipart content
+        config: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+                type: Type.ARRAY,
+                items: {
                     type: Type.OBJECT,
                     properties: {
-                        flashcards: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    question: { type: Type.STRING },
-                                    answer: { type: Type.STRING }
-                                },
-                                required: ['question', 'answer']
-                            }
-                        }
+                        day: { type: Type.NUMBER, description: "The day number in the study plan (e.g., 1)." },
+                        title: { type: Type.STRING, description: "The specific task title for that day." },
+                        description: { type: Type.STRING, description: "A brief description of the task." },
                     },
-                    required: ['flashcards']
+                    required: ["day", "title", "description"],
                 },
             },
-        });
+        },
+    });
 
-        const jsonText = response.text.trim();
-        const result = JSON.parse(jsonText);
+    const jsonString = response.text.trim();
+    const parsed = JSON.parse(jsonString);
+    return parsed;
+}
 
-        if (result && Array.isArray(result.flashcards)) {
-            return result.flashcards;
-        } else {
-            console.error("Unexpected JSON structure from Gemini for flashcards:", result);
-            return [];
-        }
+export async function generateFlashcards(
+    topic: string,
+    files: File[],
+    linkFiles: ProjectFile[]
+): Promise<Flashcard[]> {
+    const model = 'gemini-2.5-flash';
+    const linkText = linkFiles.length > 0
+        ? `The user has also provided the following online resources (do not access them, just use their names for context): ${linkFiles.map(f => `"${f.name}" at ${f.url}`).join(', ')}.`
+        : '';
 
-    } catch (error) {
-        console.error("Error calling Gemini API for flashcard generation:", error);
-        throw new Error("Failed to generate flashcards from AI.");
-    }
+    const textPart = {
+        text: `Generate a set of 20 high-quality flashcards about "${topic}".
+Use the provided file(s) as the primary source material.
+${linkText}
+Each flashcard must have a "question" and an "answer".
+The questions should be clear and concise.
+The answers should be accurate and detailed enough to be useful for studying.
+LANGUAGE: The primary language for all questions and answers MUST be Hebrew.
+TECHNICAL NOTATION: Use English and LaTeX ONLY for mathematical formulas, equations, or specific technical terms that do not have a standard Hebrew equivalent.
+
+CRITICAL - LATEX FORMATTING: All LaTeX code MUST be correctly enclosed in '$' delimiters for inline math and '$$' for block math. Ensure all delimiters are balanced and all commands are valid.
+- GOOD: $y = \\frac{1}{x}$
+- BAD: y = \\frac{1}{x} (Missing delimiters)
+- BAD: $y = \\rac{1}{x}$ (Invalid command)
+
+CRITICAL - VALIDITY: Ensure all LaTeX commands are standard and valid (e.g., use '\\frac', not '\\rac'; use '\\text', not '\\ext'). Double-check your output for formatting errors before responding.
+
+Respond with ONLY a JSON array of objects in the specified format. Do not include any other text, markdown, or explanation.
+`,
+    };
+
+    const fileParts = await Promise.all(files.map(fileToGenerativePart));
+    const contents = { parts: [textPart, ...fileParts] };
+
+    const response = await ai.models.generateContent({
+        model,
+        contents: [contents],
+        config: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+                type: Type.ARRAY,
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        question: { type: Type.STRING },
+                        answer: { type: Type.STRING },
+                    },
+                    required: ["question", "answer"],
+                },
+            },
+        },
+    });
+
+    const jsonString = response.text.trim();
+    const parsed = JSON.parse(jsonString);
+    return parsed as Flashcard[];
+}
+
+export async function generateTaskBreakdown(taskTitle: string, taskDescription: string): Promise<string[]> {
+    const model = 'gemini-2.5-flash';
+    const prompt = `Break down the following task into a list of smaller, actionable sub-tasks.
+Task Title: "${taskTitle}"
+Task Description: "${taskDescription}"
+Respond with ONLY a JSON array of strings. Each string is a sub-task.
+Do not include any other text, markdown, or explanation.`;
+
+    const response = await ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+            },
+        },
+    });
+
+    const jsonString = response.text.trim();
+    const parsed = JSON.parse(jsonString);
+    return parsed as string[];
+}
+
+export async function generateLearningTips(taskTitle: string): Promise<string> {
+    const model = 'gemini-2.5-flash';
+    const prompt = `Provide concise, actionable learning tips for the topic "${taskTitle}".
+Focus on strategies for better understanding and retention.
+Format the response as a simple HTML list (ul/li).
+Do not include a full HTML document structure, just the list itself.`;
+
+    const response = await ai.models.generateContent({
+        model,
+        contents: prompt,
+    });
+    return response.text;
 }

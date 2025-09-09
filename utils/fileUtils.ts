@@ -1,54 +1,50 @@
-import { ProjectFile } from '../types';
+import { ProjectFile } from './types';
 
-// This file contains utility functions related to file handling.
-
-export function formatBytes(bytes: number, decimals = 2): string {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const dm = decimals < 0 ? 0 : decimals;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+export function getFileIcon(mimeType: string, url?: string): string {
+  if (url) {
+    if (url.includes('docs.google.com/document')) return '📄';
+    if (url.includes('docs.google.com/spreadsheets')) return '📊';
+    if (url.includes('docs.google.com/presentation')) return '🖼️';
+    return '🔗';
+  }
+  if (mimeType.startsWith('image/')) return '🖼️';
+  if (mimeType === 'application/pdf') return '📄';
+  if (mimeType === 'text/plain') return '📝';
+  if (mimeType.includes('spreadsheet') || mimeType.includes('csv')) return '📊';
+  return '📁';
 }
 
-export function getFileIcon(mimeType: string): string {
-    if (mimeType.startsWith('image/')) return '🖼️';
-    if (mimeType === 'application/pdf') return '📄';
-    if (mimeType.startsWith('text/')) return '📝';
-    return '📁';
+export function formatFileSize(bytes: number): string {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
 export function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = error => reject(error);
-  });
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
 }
 
-/**
- * Converts a data URL string back into a File object.
- * This is necessary to use files stored in localStorage with the Gemini API.
- * @param dataUrl The data URL string.
- * @param filename The desired name for the file.
- * @returns A File object.
- */
-export function dataUrlToFile(dataUrl: string, filename: string): File {
-    const arr = dataUrl.split(',');
-    if (arr.length < 2) {
-        throw new Error('Invalid data URL');
+export async function dataUrlToFile(dataUrl: string, filename: string, mimeType: string): Promise<File> {
+    const res = await fetch(dataUrl);
+    const blob = await res.blob();
+    return new File([blob], filename, { type: mimeType });
+}
+
+export function parseGoogleUrl(url: string) {
+    if (url.includes('docs.google.com/document')) return { type: 'Google Doc', name: 'Google Document' };
+    if (url.includes('docs.google.com/spreadsheets')) return { type: 'Google Sheet', name: 'Google Spreadsheet' };
+    if (url.includes('docs.google.com/presentation')) return { type: 'Google Slides', name: 'Google Slides Presentation' };
+    try {
+        const urlObj = new URL(url);
+        return { type: 'Web Link', name: urlObj.hostname };
+    } catch {
+        return { type: 'Web Link', name: 'Web Link' };
     }
-    const mimeMatch = arr[0].match(/:(.*?);/);
-    if (!mimeMatch) {
-        throw new Error("Could not parse mime type from data URL");
-    }
-    const mime = mimeMatch[1];
-    const bstr = atob(arr[1]);
-    let n = bstr.length;
-    const u8arr = new Uint8Array(n);
-    while (n--) {
-        u8arr[n] = bstr.charCodeAt(n);
-    }
-    return new File([u8arr], filename, { type: mime });
 }
