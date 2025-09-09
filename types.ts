@@ -1,5 +1,5 @@
-// This file defines the core data structures used throughout the application.
-
+// Fix: Define enums directly in this file to break the circular dependency with constants.ts.
+// The enums were implicitly defined by their usage in constants.ts but were not declared anywhere.
 export enum TaskStatus {
   ToDo = 'To Do',
   InProgress = 'In Progress',
@@ -30,6 +30,13 @@ export interface Flashcard {
   answer: string;
 }
 
+export interface ProjectFile {
+  id: string;
+  name: string;
+  type: string;
+  content: string; // Data URL
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -43,8 +50,6 @@ export interface Task {
   day?: number; // for study sprints
 }
 
-// This is for in-memory representation while user is uploading files for AI processing.
-// These are not persisted in local storage.
 export interface LearningResource {
     id: string;
     file: File;
@@ -64,8 +69,7 @@ export interface Project {
   timerSettings: TimerSettings;
   pomodoros: number;
   brainDump: string;
-  // Note: We don't persist learning resources with File objects across sessions.
-  // This app is designed for session-based AI interactions.
+  files: ProjectFile[];
 }
 
 export type AIAssistantMode = 'breakdown' | 'tips' | 'first-step';

@@ -184,6 +184,11 @@ export async function generateFlashcards(files: File[], prompt: string): Promise
         ).then(parts => parts.flat());
 
         const fullPrompt = `Based on the provided study materials and the user's focus, generate a set of flashcards. Each flashcard should have a clear 'question' on one side and a concise 'answer' on the other.
+        
+        **Language and Formatting Instructions:**
+        - The primary language for all questions and answers MUST be Hebrew.
+        - Use English and LaTeX notation ONLY for mathematical formulas, equations, or specific technical terms that do not have a standard Hebrew equivalent. For example, use LaTeX for something like an integral: $\\int_{a}^{b} f(x) dx$.
+
         User's focus: "${prompt}"
         
         Generate the flashcards in a structured JSON format.`;
