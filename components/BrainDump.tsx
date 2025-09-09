@@ -7,7 +7,7 @@ interface BrainDumpProps {
 
 const BrainDump: React.FC<BrainDumpProps> = ({ notes, onNotesChange }) => {
     return (
-        <div className="p-4 rounded-lg shadow-lg border border-jam-border dark:border-slate-700 bg-jam-light-gray/80 dark:bg-slate-800/50 backdrop-blur-sm">
+        <div className="p-4 rounded-lg shadow-lg border border-jam-border dark:border-slate-700 bg-white/80 dark:bg-slate-800/50 backdrop-blur-sm">
             <h3 className="font-semibold text-jam-dark dark:text-slate-200 mb-2 flex items-center">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 mr-2 text-jam-orange dark:text-orange-400">
                      <path d="M10 3.75a.75.75 0 0 1 .75.75v1.5h1.5a.75.75 0 0 1 0 1.5h-1.5v1.5a.75.75 0 0 1-1.5 0v-1.5h-1.5a.75.75 0 0 1 0-1.5h1.5v-1.5a.75.75 0 0 1 .75-.75Z" />
@@ -22,7 +22,7 @@ const BrainDump: React.FC<BrainDumpProps> = ({ notes, onNotesChange }) => {
                 value={notes}
                 onChange={(e) => onNotesChange(e.target.value)}
                 placeholder="Got a random idea? Need to remember to call someone? Write it here and get back to your task."
-                className="w-full h-32 bg-jam-yellow-light/50 dark:bg-slate-900/50 border-t-2 border-jam-dark dark:border-pink-600 p-2 text-sm text-jam-dark dark:text-slate-200 placeholder-slate-500 dark:placeholder-slate-400 focus:ring-0 focus:outline-none focus:border-jam-dark dark:focus:border-pink-500 resize-none"
+                className="w-full h-32 bg-white/50 dark:bg-slate-900/50 border-t-2 border-jam-dark dark:border-pink-600 p-2 text-sm text-jam-dark dark:text-slate-200 placeholder-slate-500 dark:placeholder-slate-400 focus:ring-0 focus:outline-none focus:border-jam-dark dark:focus:border-pink-500 resize-none"
                 aria-label="Brain Dump Notes"
             />
         </div>
