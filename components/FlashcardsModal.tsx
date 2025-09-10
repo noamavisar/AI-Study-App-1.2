@@ -55,9 +55,21 @@ const FlashcardsModal: React.FC<FlashcardsModalProps> = ({ isOpen, onClose, flas
         try {
             await ensureMathJaxIsReady();
             if (frontContentRef.current && backContentRef.current && flashcards.length > 0) {
+                const sanitize = (text: string) => {
+                    // Remove paragraph/break tags and excessive whitespace to ensure natural text flow,
+                    // letting MathJax handle layout for math expressions.
+                    return text
+                      .replace(/<\/?p>|<br\s*\/?>|\n/g, ' ')
+                      .replace(/\s\s+/g, ' ')
+                      .trim();
+                };
+
+                const question = sanitize(flashcards[currentIndex].question);
+                const answer = sanitize(flashcards[currentIndex].answer);
+
                 // Set the raw HTML content for both sides
-                frontContentRef.current.innerHTML = flashcards[currentIndex].question;
-                backContentRef.current.innerHTML = flashcards[currentIndex].answer;
+                frontContentRef.current.innerHTML = question;
+                backContentRef.current.innerHTML = answer;
                 // Ask MathJax to typeset both elements
                 window.MathJax.typesetPromise([frontContentRef.current, backContentRef.current]);
             }

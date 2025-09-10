@@ -112,8 +112,10 @@ export async function generateFlashcards(topic: string, files: File[], linkFiles
         
         CRITICAL INSTRUCTIONS FOR MATH/SCIENCE:
         - All mathematical notation MUST use LaTeX.
-        - Inline math uses single dollar signs: $ E = mc^2 $.
-        - Display math (for equations on their own line) uses double dollar signs: $$ \\sum_{n=1}^{\\infty} \\frac{1}{n^2} = \\frac{\\pi^2}{6} $$.
+        - Use INLINE math for formulas within a sentence. Delimit with single dollar signs: $...$.
+          - Correct example: "The derivative of $x^2$ is $2x$."
+        - Use DISPLAY math for important formulas that should stand alone on their own line. Delimit with double dollar signs: $$...$$.
+          - Correct example: "The quadratic formula is $$x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$$"
         - Ensure all LaTeX syntax is valid and renderable by MathJax. For example, use \\langle and \\rangle for angle brackets, not "langle".
         - If the topic is in Hebrew, the text should be in Hebrew, but all LaTeX commands must remain in English (e.g., $\\mathbb{R}$ not $\\ממשי{R}$).
     `;
