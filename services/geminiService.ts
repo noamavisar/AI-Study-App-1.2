@@ -105,19 +105,21 @@ export async function generateFlashcards(topic: string, files: File[], linkFiles
     const linkParts = linkFiles.map(f => ({ text: `Web Resource Reference: ${f.name} at ${f.url}` }));
 
     const prompt = `
-        Generate a comprehensive set of flashcards for the topic: "${topic}".
+        Generate a comprehensive set of flashcards for the topic: "${topic}" IN HEBREW.
+        The entire text of the question and answer should be in Hebrew.
         If study materials (files, links) are provided, they are the primary source.
         Each flashcard must have a 'question' and an 'answer'.
         The response MUST be a valid JSON array of objects, with "question" and "answer" keys.
         
-        CRITICAL INSTRUCTIONS FOR MATH/SCIENCE:
+        CRITICAL INSTRUCTIONS FOR MATH/SCIENCE (in Hebrew context):
         - All mathematical notation MUST use LaTeX.
+        - All text outside of LaTeX delimiters must be in HEBREW.
+        - All LaTeX commands inside delimiters MUST remain in English (e.g., $\\mathbb{R}$ not $\\ממשי{R}$).
         - Use INLINE math for formulas within a sentence. Delimit with single dollar signs: $...$.
-          - Correct example: "The derivative of $x^2$ is $2x$."
+          - Correct example: "הנגזרת של $x^2$ היא $2x$."
         - Use DISPLAY math for important formulas that should stand alone on their own line. Delimit with double dollar signs: $$...$$.
-          - Correct example: "The quadratic formula is $$x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$$"
+          - Correct example: "נוסחת השורשים היא $$x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$$"
         - Ensure all LaTeX syntax is valid and renderable by MathJax. For example, use \\langle and \\rangle for angle brackets, not "langle".
-        - If the topic is in Hebrew, the text should be in Hebrew, but all LaTeX commands must remain in English (e.g., $\\mathbb{R}$ not $\\ממשי{R}$).
     `;
     
     const response = await ai.models.generateContent({
@@ -150,6 +152,59 @@ export async function generateFlashcards(topic: string, files: File[], linkFiles
         console.error("Failed to parse flashcards JSON:", e);
         throw new Error("The AI returned an invalid format for the flashcards. Please try again.");
     }
+}
+
+export async function generatePromptSuggestions(files: File[], linkFiles: ProjectFile[]): Promise<string[]> {
+  const fileParts = await Promise.all(files.map(fileToGenerativePart));
+  const linkParts = linkFiles.map(f => ({ text: `Web Resource Reference: ${f.name} at ${f.url}` }));
+
+  if (fileParts.length === 0 && linkParts.length === 0) {
+    throw new Error("Please select at least one file or link to get prompt suggestions.");
+  }
+
+  const prompt = `
+    As a prompt engineering expert, your task is to analyze the provided study materials (text content from files and links) and generate a list of 3-5 high-quality, effective prompts for creating flashcards.
+
+    Instructions:
+    1.  **Analyze Content:** Thoroughly review the provided materials to identify core concepts, key themes, important figures, critical vocabulary, and essential relationships between ideas.
+    2.  **Generate Prompts:** Create a list of 3 to 5 distinct prompt suggestions.
+    3.  **Action-Oriented:** Each prompt must start with an action verb (e.g., "Summarize," "Identify," "Explain," "Compare and contrast," "List the key characteristics of").
+    4.  **Concise and Focused:** Each prompt must be a single, clear, and concise sentence. It should guide the user to focus on a specific, meaningful aspect of the material.
+    5.  **Directly Relevant:** The generated prompts must be directly and obviously relevant to the analyzed source material.
+
+    Return the list of prompts as a valid JSON array of strings.
+  `;
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: { parts: [{ text: prompt }, ...fileParts, ...linkParts] },
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.STRING,
+          description: "A single, concise, action-oriented prompt suggestion."
+        }
+      }
+    }
+  });
+
+  const text = response.text;
+  if (typeof text !== 'string' || !text.trim()) {
+    throw new Error("The AI returned an empty response. This might be due to a content safety block or a network issue.");
+  }
+
+  try {
+    const suggestions = JSON.parse(text);
+    if (Array.isArray(suggestions) && suggestions.every(s => typeof s === 'string')) {
+        return suggestions;
+    }
+    throw new Error("Invalid format received from AI.");
+  } catch (e) {
+    console.error("Failed to parse prompt suggestions JSON:", e);
+    throw new Error("The AI returned an invalid format for the prompt suggestions. Please try again.");
+  }
 }
 
 const correctLatex = async (brokenExpression: string): Promise<string> => {

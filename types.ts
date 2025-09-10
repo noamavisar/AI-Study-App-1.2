@@ -19,6 +19,12 @@ export enum ResourceType {
     OldTest = 'Old Test',
 }
 
+export enum FlashcardReviewStatus {
+  New = 'New',
+  NeedsReview = 'Needs Review',
+  Learned = 'Learned',
+}
+
 export type AIAssistantMode = 'breakdown' | 'tips';
 
 export interface Subtask {
@@ -30,6 +36,7 @@ export interface Subtask {
 export interface Flashcard {
   question: string;
   answer: string;
+  reviewStatus?: FlashcardReviewStatus;
 }
 
 export interface FlashcardDeck {

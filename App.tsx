@@ -17,7 +17,7 @@ import LearningTipBar from './components/LearningTipBar';
 import UndoToast from './components/UndoToast';
 import ConfirmationModal from './components/ConfirmationModal';
 import FlashcardLibrary from './components/FlashcardLibrary';
-import { Task, TaskStatus, Priority, Project, Subtask, AIAssistantMode, Flashcard, ResourceType, ProjectFile, LastDeletedTaskInfo, FlashcardDeck } from './types';
+import { Task, TaskStatus, Priority, Project, Subtask, AIAssistantMode, Flashcard, ResourceType, ProjectFile, LastDeletedTaskInfo, FlashcardDeck, FlashcardReviewStatus } from './types';
 import { generateStudySprint, generateFlashcards, generateTaskBreakdown, generateLearningTips, verifyAndCorrectFlashcards } from './services/geminiService';
 import { fileToDataUrl, dataUrlToFile, parseGoogleUrl } from './utils/fileUtils';
 import { setFile, getFile, deleteFile, clearFiles } from './utils/idb';
@@ -56,6 +56,10 @@ function useLocalStorage<T>(key: string, initialValue: T): [T, React.Dispatch<Re
               const flashcardDecks = (proj.flashcardDecks || []).map((deck: any) => ({
                 ...deck,
                 name: deck.name || deck.topic, // Migrate from topic to name
+                flashcards: (deck.flashcards || []).map((card: any) => ({
+                  ...card,
+                  reviewStatus: card.reviewStatus || FlashcardReviewStatus.New, // Hydrate older cards with default status
+                })),
               }));
 
 
@@ -468,11 +472,11 @@ const App: React.FC = () => {
         const newDeck: FlashcardDeck = {
           id: uuidv4(),
           name: `Flashcards Deck ${activeProject.flashcardDecks.length + 1}`,
-          flashcards: flashcards,
+          flashcards: flashcards.map(fc => ({ ...fc, reviewStatus: FlashcardReviewStatus.New })),
           createdAt: new Date().toISOString(),
         };
         updateProject(activeProject.id, { flashcardDecks: [...activeProject.flashcardDecks, newDeck] });
-        setCurrentFlashcards(flashcards);
+        setCurrentFlashcards(newDeck.flashcards);
         setStudyingDeckId(newDeck.id);
         setIsFlashcardGeneratorOpen(false);
         setIsFlashcardsModalOpen(true);
@@ -522,6 +526,28 @@ const App: React.FC = () => {
     updateProject(activeProject.id, { flashcardDecks: newDecks });
   };
   
+  const handleUpdateFlashcardStatus = (deckId: string, cardIndex: number, status: FlashcardReviewStatus) => {
+    if (!activeProject || !deckId) return;
+
+    const deckToUpdate = activeProject.flashcardDecks.find(d => d.id === deckId);
+    if (!deckToUpdate) return;
+
+    const newFlashcards = [...deckToUpdate.flashcards];
+    if (!newFlashcards[cardIndex]) return;
+
+    newFlashcards[cardIndex] = { ...newFlashcards[cardIndex], reviewStatus: status };
+    
+    const newDecks = activeProject.flashcardDecks.map(d => 
+        d.id === deckId ? { ...d, flashcards: newFlashcards } : d
+    );
+
+    updateProject(activeProject.id, { flashcardDecks: newDecks });
+
+    if (deckId === studyingDeckId) {
+        setCurrentFlashcards(newFlashcards);
+    }
+  };
+
   const handleForceRenderFlashcards = async () => {
     if (!studyingDeckId || !activeProject) return;
 
@@ -760,6 +786,9 @@ const App: React.FC = () => {
             flashcards={currentFlashcards}
             onForceRender={handleForceRenderFlashcards}
             isRendering={isLatexRendering}
+            studyingDeckId={studyingDeckId}
+            onUpdateFlashcardStatus={handleUpdateFlashcardStatus}
+            maxWidth="max-w-2xl"
         />
       )}
 
