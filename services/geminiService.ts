@@ -89,7 +89,7 @@ export async function generateFlashcards(
         : '';
 
     const textPart = {
-        text: `Generate a set of 20 high-quality flashcards about "${topic}".
+        text: `Generate a comprehensive set of high-quality flashcards about "${topic}". The number of flashcards should be determined by the amount and complexity of the content in the provided file(s). Cover all the key concepts.
 Use the provided file(s) as the primary source material.
 ${linkText}
 Each flashcard must have a "question" and an "answer".
