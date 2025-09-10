@@ -1,5 +1,5 @@
 import React from 'react';
-import { Task, TaskStatus, AIAssistantMode, Flashcard, Priority } from '../types';
+import { Task, TaskStatus, AIAssistantMode, Flashcard, Priority, FlashcardDeck } from '../types';
 import KanbanColumn from './KanbanColumn';
 import { TASK_STATUSES } from '../constants';
 
@@ -14,7 +14,8 @@ interface KanbanBoardProps {
   onUpdateTaskPriority: (taskId: string, newPriority: Priority) => void;
   onUpdateTaskDueDate: (taskId: string, newDueDate: string) => void;
   onOpenAIAssistant: (mode: AIAssistantMode, task: Task) => void;
-  onOpenFlashcardTask: (flashcards: Flashcard[]) => void;
+  // FIX: Changed prop type from Flashcard[] to FlashcardDeck to match the handler in App.tsx.
+  onOpenFlashcardTask: (deck: FlashcardDeck) => void;
 }
 
 const KanbanBoard: React.FC<KanbanBoardProps> = (props) => {

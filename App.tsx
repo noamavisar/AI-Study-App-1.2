@@ -18,7 +18,7 @@ import UndoToast from './components/UndoToast';
 import ConfirmationModal from './components/ConfirmationModal';
 import FlashcardLibrary from './components/FlashcardLibrary';
 import { Task, TaskStatus, Priority, Project, Subtask, AIAssistantMode, Flashcard, ResourceType, ProjectFile, LastDeletedTaskInfo, FlashcardDeck } from './types';
-import { generateStudySprint, generateFlashcards, generateTaskBreakdown, generateLearningTips } from './services/geminiService';
+import { generateStudySprint, generateFlashcards, generateTaskBreakdown, generateLearningTips, verifyAndCorrectFlashcards } from './services/geminiService';
 import { fileToDataUrl, dataUrlToFile, parseGoogleUrl } from './utils/fileUtils';
 import { setFile, getFile, deleteFile, clearFiles } from './utils/idb';
 
@@ -41,11 +41,14 @@ function useLocalStorage<T>(key: string, initialValue: T): [T, React.Dispatch<Re
                       if (hasDayA && !hasDayB) return -1;
                       if (!hasDayA && hasDayB) return 1;
                       if (hasDayA && hasDayB) return a.day! - b.day!;
-                      const dateA = a.dueDate ? new Date(a.dueDate + 'T00:00:00Z') : null;
-                      const dateB = b.dueDate ? new Date(b.dueDate + 'T00:00:00Z') : null;
+                      
+                      const dateA = a.dueDate ? new Date(a.dueDate) : null;
+                      const dateB = b.dueDate ? new Date(b.dueDate) : null;
+
                       if (dateA && !dateB) return -1;
                       if (!dateA && dateB) return 1;
-                      if (dateA && dateB) return dateA.getTime() - b.getTime();
+                      if (dateA && dateB) return dateA.getTime() - dateB.getTime();
+                      
                       return 0;
                   }).map((task: Task, index: number) => ({...task, order: index}));
               }
@@ -134,6 +137,8 @@ const App: React.FC = () => {
 
   // Flashcards state
   const [currentFlashcards, setCurrentFlashcards] = useState<Flashcard[]>([]);
+  const [studyingDeckId, setStudyingDeckId] = useState<string | null>(null);
+  const [isLatexRendering, setIsLatexRendering] = useState(false);
 
   // Undo Delete State
   const [lastDeletedTask, setLastDeletedTask] = useState<LastDeletedTaskInfo | null>(null);
@@ -430,12 +435,17 @@ const App: React.FC = () => {
     setAiIsLoading(true);
     try {
         const sprintTasks = await generateStudySprint(topic, duration, resources, files, linkFiles);
-        const newTasks: Task[] = sprintTasks.map(sprintTask => ({
+        // FIX: The AI may not return all fields, so we need to provide defaults for required Task properties.
+        const newTasks: Task[] = sprintTasks.map((sprintTask, index) => ({
+            // Provide defaults for required fields, then override with AI response
+            title: `Generated Task for Day ${sprintTask.day ?? index + 1}`,
+            description: '',
+            estimatedTime: 120,
             ...sprintTask,
+            // Set fields that are not part of the AI response
             id: uuidv4(),
             status: TaskStatus.ToDo,
             priority: Priority.ImportantNotUrgent,
-            estimatedTime: 120, // Default time
             order: Date.now() + (sprintTask.day || 0), // Ensure order respects day
         }));
         updateProject(activeProject.id, { tasks: [...activeProject.tasks, ...newTasks] });
@@ -452,7 +462,9 @@ const App: React.FC = () => {
     if (!activeProject) return;
     setAiIsLoading(true);
     try {
-        const flashcards = await generateFlashcards(topic, files, linkFiles);
+        const initialFlashcards = await generateFlashcards(topic, files, linkFiles);
+        const flashcards = await verifyAndCorrectFlashcards(initialFlashcards);
+        
         const newDeck: FlashcardDeck = {
           id: uuidv4(),
           name: `Flashcards Deck ${activeProject.flashcardDecks.length + 1}`,
@@ -461,6 +473,7 @@ const App: React.FC = () => {
         };
         updateProject(activeProject.id, { flashcardDecks: [...activeProject.flashcardDecks, newDeck] });
         setCurrentFlashcards(flashcards);
+        setStudyingDeckId(newDeck.id);
         setIsFlashcardGeneratorOpen(false);
         setIsFlashcardsModalOpen(true);
     } catch (error) {
@@ -471,8 +484,9 @@ const App: React.FC = () => {
     }
   };
   
-  const handleStudyFlashcards = (flashcards: Flashcard[]) => {
-    setCurrentFlashcards(flashcards);
+  const handleStudyFlashcards = (deck: FlashcardDeck) => {
+    setCurrentFlashcards(deck.flashcards);
+    setStudyingDeckId(deck.id);
     setIsFlashcardsModalOpen(true);
   };
   
@@ -506,6 +520,31 @@ const App: React.FC = () => {
       deck.id === deckId ? { ...deck, name: newName } : deck
     );
     updateProject(activeProject.id, { flashcardDecks: newDecks });
+  };
+  
+  const handleForceRenderFlashcards = async () => {
+    if (!studyingDeckId || !activeProject) return;
+
+    const deckToFix = activeProject.flashcardDecks.find(d => d.id === studyingDeckId);
+    if (!deckToFix) return;
+
+    setIsLatexRendering(true);
+    try {
+      const correctedFlashcards = await verifyAndCorrectFlashcards(deckToFix.flashcards);
+      
+      const newDecks = activeProject.flashcardDecks.map(deck => 
+        deck.id === studyingDeckId ? { ...deck, flashcards: correctedFlashcards } : deck
+      );
+      updateProject(activeProject.id, { flashcardDecks: newDecks });
+      
+      setCurrentFlashcards(correctedFlashcards);
+
+    } catch (error) {
+      console.error("Failed to force render LaTeX:", error);
+      alert("An error occurred while trying to fix the formulas. Please check the console for details.");
+    } finally {
+      setIsLatexRendering(false);
+    }
   };
 
 
@@ -658,7 +697,7 @@ const App: React.FC = () => {
                 />
                 <FlashcardLibrary
                   decks={activeProject.flashcardDecks}
-                  onStudyDeck={(deck) => handleStudyFlashcards(deck.flashcards)}
+                  onStudyDeck={handleStudyFlashcards}
                   onDeleteDeck={handleDeleteFlashcardDeck}
                   onUpdateDeckName={handleUpdateFlashcardDeckName}
                 />
@@ -714,8 +753,13 @@ const App: React.FC = () => {
       {isFlashcardsModalOpen && (
         <FlashcardsModal 
             isOpen={isFlashcardsModalOpen}
-            onClose={() => setIsFlashcardsModalOpen(false)}
+            onClose={() => {
+                setIsFlashcardsModalOpen(false);
+                setStudyingDeckId(null);
+            }}
             flashcards={currentFlashcards}
+            onForceRender={handleForceRenderFlashcards}
+            isRendering={isLatexRendering}
         />
       )}
 

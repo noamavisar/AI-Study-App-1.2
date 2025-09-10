@@ -1,4 +1,4 @@
-import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { Task, ResourceType, Flashcard, ProjectFile } from '../types';
 
 // In a real environment, this is provided externally.
@@ -22,167 +22,234 @@ const fileToGenerativePart = async (file: File) => {
     };
 };
 
-export async function generateStudySprint(
-    topic: string,
-    duration: number,
-    resources: ResourceType[],
-    files: File[],
-    linkFiles: ProjectFile[]
-): Promise<Omit<Task, 'id' | 'status' | 'priority' | 'estimatedTime'>[]> {
-    const model = 'gemini-2.5-flash';
-    const resourceText = resources.length > 0 ? `focusing on these resource types: ${resources.join(', ')}` : '';
-    const linkText = linkFiles.length > 0
-        ? `The user has also provided the following online resources (do not access them, just use their names for context): ${linkFiles.map(f => `"${f.name}" at ${f.url}`).join(', ')}.`
-        : '';
+export async function generateStudySprint(topic: string, duration: number, resources: ResourceType[], files: File[], linkFiles: ProjectFile[]): Promise<Partial<Task>[]> {
+  const fileParts = await Promise.all(files.map(fileToGenerativePart));
+  const linkParts = linkFiles.map(f => ({ text: `Web Resource: ${f.name} - ${f.url}` }));
 
-    const textPart = {
-        text: `Create a detailed, day-by-day study plan for the topic "${topic}". The plan should span ${duration} days.
-The user's goal is to be well-prepared for a test at the end of this period.
-${resourceText}
-${linkText}
-The user has provided file(s) as study material. Use their content to generate a relevant and specific study plan.
-For each day, create a list of tasks. Each task must have a "title" and a "description".
-The description should be concise and actionable.
-IMPORTANT: Respond with ONLY a JSON object in the specified format. Do not include any other text, markdown, or explanation.
-`,
-    };
+  const prompt = `
+    Create a detailed ${duration}-day study plan for the topic: "${topic}".
+    The available resources are: ${resources.join(', ')}.
+    Break down the topic into a logical sequence of tasks, one or more per day.
+    For each task, provide a title, a short description, an estimated time in minutes (e.g., 90), and the day number it should be completed on.
+    Use the provided files and links as the primary study material.
+  `;
 
-    const fileParts = await Promise.all(files.map(fileToGenerativePart));
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: { parts: [{ text: prompt }, ...fileParts, ...linkParts] },
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            day: { type: Type.INTEGER, description: "The day number in the study plan." },
+            title: { type: Type.STRING, description: "A concise title for the study task." },
+            description: { type: Type.STRING, description: "A brief description of what to study or do." },
+            estimatedTime: { type: Type.INTEGER, description: "Estimated time in minutes to complete the task." }
+          }
+        }
+      }
+    }
+  });
 
-    const contents = { parts: [textPart, ...fileParts] };
+  const text = response.text;
+  if (typeof text !== 'string' || !text.trim()) {
+    throw new Error("The AI returned an empty response. This might be due to a content safety block or a network issue. Please try a different topic or file.");
+  }
+  
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    console.error("Failed to parse study sprint JSON:", e);
+    throw new Error("The AI returned an invalid format for the study sprint. Please try again.");
+  }
+}
 
+export async function generateTaskBreakdown(title: string, description: string | undefined): Promise<string[]> {
+    const prompt = `Break down the following task into a list of smaller, actionable sub-tasks. Task Title: "${title}". Description: "${description || 'No description provided.'}". Return a JSON array of strings.`;
     const response = await ai.models.generateContent({
-        model,
-        // FIX: The multipart content object should be passed directly, not wrapped in an array.
-        contents,
+        model: 'gemini-2.5-flash',
+        contents: prompt,
         config: {
-            responseMimeType: 'application/json',
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING }
+            }
+        }
+    });
+
+    const text = response.text;
+    if (typeof text !== 'string' || !text.trim()) {
+        return [];
+    }
+    return JSON.parse(text);
+}
+
+export async function generateLearningTips(topic: string): Promise<string> {
+    const prompt = `Provide 2-3 concise, actionable learning tips for the topic "${topic}". Format the response as simple HTML with paragraphs <p> and bold tags <b> for emphasis. Do not include any other HTML tags.`;
+    const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+    return response.text || "";
+}
+
+export async function generateFlashcards(topic: string, files: File[], linkFiles: ProjectFile[]): Promise<Flashcard[]> {
+    const fileParts = await Promise.all(files.map(fileToGenerativePart));
+    const linkParts = linkFiles.map(f => ({ text: `Web Resource Reference: ${f.name} at ${f.url}` }));
+
+    const prompt = `
+        Generate a comprehensive set of flashcards for the topic: "${topic}".
+        If study materials (files, links) are provided, they are the primary source.
+        Each flashcard must have a 'question' and an 'answer'.
+        The response MUST be a valid JSON array of objects, with "question" and "answer" keys.
+        
+        CRITICAL INSTRUCTIONS FOR MATH/SCIENCE:
+        - All mathematical notation MUST use KaTeX-compatible LaTeX.
+        - Inline math uses single dollar signs: $ E = mc^2 $.
+        - Display math (for equations on their own line) uses double dollar signs: $$ \\sum_{n=1}^{\\infty} \\frac{1}{n^2} = \\frac{\\pi^2}{6} $$.
+        - Ensure all LaTeX syntax is valid and renderable by KaTeX. For example, use \\langle and \\rangle for angle brackets, not "langle".
+        - If the topic is in Hebrew, the text should be in Hebrew, but all LaTeX commands must remain in English (e.g., $\\mathbb{R}$ not $\\ממשי{R}$).
+    `;
+    
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: { parts: [{ text: prompt }, ...fileParts, ...linkParts] },
+        config: {
+            responseMimeType: "application/json",
             responseSchema: {
                 type: Type.ARRAY,
                 items: {
                     type: Type.OBJECT,
                     properties: {
-                        day: { type: Type.NUMBER, description: "The day number in the study plan (e.g., 1)." },
-                        title: { type: Type.STRING, description: "The specific task title for that day." },
-                        description: { type: Type.STRING, description: "A brief description of the task." },
+                        question: { type: Type.STRING, description: "The question for the flashcard." },
+                        answer: { type: Type.STRING, description: "The answer to the question." }
                     },
-                    required: ["day", "title", "description"],
-                },
-            },
-        },
+                    required: ["question", "answer"]
+                }
+            }
+        }
     });
 
     const text = response.text;
-    if (!text) {
-        throw new Error("The AI returned an empty response. This might be due to content restrictions or a network issue. Please try again.");
+    if (typeof text !== 'string' || !text.trim()) {
+        throw new Error("The AI returned an empty response. This might be due to a content safety block or a network issue. Please try a different topic or file.");
     }
-    const jsonString = text.trim();
-    const parsed = JSON.parse(jsonString);
-    return parsed;
+
+    try {
+        return JSON.parse(text);
+    } catch (e) {
+        console.error("Failed to parse flashcards JSON:", e);
+        throw new Error("The AI returned an invalid format for the flashcards. Please try again.");
+    }
 }
 
-export async function generateFlashcards(
-    topic: string,
-    files: File[],
-    linkFiles: ProjectFile[]
-): Promise<Flashcard[]> {
-    const model = 'gemini-2.5-flash';
-    const linkText = linkFiles.length > 0
-        ? `The user has also provided the following online resources (do not access them, just use their names for context): ${linkFiles.map(f => `"${f.name}" at ${f.url}`).join(', ')}.`
-        : '';
-
-    const textPart = {
-        text: `Generate a comprehensive set of high-quality flashcards about "${topic}". The number of flashcards should be determined by the amount and complexity of the content in the provided file(s). Cover all the key concepts.
-Use the provided file(s) as the primary source material.
-${linkText}
-Each flashcard must have a "question" and an "answer".
-The questions should be clear and concise.
-The answers should be accurate and detailed enough to be useful for studying.
-LANGUAGE: The primary language for all questions and answers MUST be Hebrew.
-TECHNICAL NOTATION: Use English and LaTeX ONLY for mathematical formulas, equations, or specific technical terms that do not have a standard Hebrew equivalent.
-
-CRITICAL - LATEX FORMATTING: All LaTeX code MUST be correctly enclosed in '$' delimiters for inline math and '$$' for block math. Ensure all delimiters are balanced and all commands are valid.
-- GOOD: $y = \\frac{1}{x}$
-- BAD: y = \\frac{1}{x} (Missing delimiters)
-- BAD: $y = \\rac{1}{x}$ (Invalid command)
-
-CRITICAL - VALIDITY: Ensure all LaTeX commands are standard and valid (e.g., use '\\frac', not '\\rac'; use '\\text', not '\\ext'). Double-check your output for formatting errors before responding.
-
-Respond with ONLY a JSON array of objects in the specified format. Do not include any other text, markdown, or explanation.
-`,
-    };
-
-    const fileParts = await Promise.all(files.map(fileToGenerativePart));
-    const contents = { parts: [textPart, ...fileParts] };
+const correctLatex = async (brokenExpression: string): Promise<string> => {
+    const prompt = `
+        The following LaTeX expression failed to render in KaTeX, likely due to an invalid command or syntax:
+        \`${brokenExpression}\`
+        
+        Your task is to correct ONLY the LaTeX syntax to make it compatible with KaTeX.
+        - For example, if you see "langle", it should be "\\langle".
+        - The expression is from a text in Hebrew, but the LaTeX commands themselves are standard English (e.g., \\frac, \\sum).
+        - Return ONLY the corrected LaTeX code.
+        - Do NOT include delimiters like $ or $$.
+        - Do NOT include any explanations or surrounding text.
+    `;
 
     const response = await ai.models.generateContent({
-        model,
-        // FIX: The multipart content object should be passed directly, not wrapped in an array.
-        contents,
-        config: {
-            responseMimeType: 'application/json',
-            responseSchema: {
-                type: Type.ARRAY,
-                items: {
-                    type: Type.OBJECT,
-                    properties: {
-                        question: { type: Type.STRING },
-                        answer: { type: Type.STRING },
-                    },
-                    required: ["question", "answer"],
-                },
-            },
-        },
+        model: "gemini-2.5-flash",
+        contents: prompt
     });
-
+    
     const text = response.text;
-    if (!text) {
-        throw new Error("The AI returned an empty response. This might be due to content restrictions or a network issue. Please try again.");
+    if (typeof text !== 'string' || !text.trim()) {
+        throw new Error("AI correction service returned an empty response.");
     }
-    const jsonString = text.trim();
-    const parsed = JSON.parse(jsonString);
-    return parsed as Flashcard[];
+    
+    return text.trim().replace(/`/g, '').replace(/\$/g, '');
+};
+
+async function processTextForCorrection(text: string, testDiv: HTMLElement): Promise<string> {
+    const regex = /(\$\$[\s\S]+?\$\$|\$[\s\S]+?\$)/g;
+    const parts = text.split(regex);
+    const processedParts = [];
+
+    for (const part of parts) {
+        if (part.startsWith('$') && part.endsWith('$')) {
+            const isDisplay = part.startsWith('$$');
+            const rawExpression = part.slice(isDisplay ? 2 : 1, isDisplay ? -2 : -1);
+
+            try {
+                window.katex.render(rawExpression, testDiv, { throwOnError: true, displayMode: isDisplay });
+                processedParts.push(part);
+            } catch (e) {
+                console.warn('Broken LaTeX found, attempting to correct:', rawExpression);
+                try {
+                    const correctedRaw = await correctLatex(rawExpression);
+                    const delimiter = isDisplay ? '$$' : '$';
+                    const correctedPart = `${delimiter}${correctedRaw}${delimiter}`;
+                    
+                    try {
+                        window.katex.render(correctedRaw, testDiv, { throwOnError: true, displayMode: isDisplay });
+                        console.log('Correction successful:', correctedPart);
+                        processedParts.push(correctedPart);
+                    } catch (finalError) {
+                        console.error('AI correction also failed. Keeping original broken text.', finalError);
+                        processedParts.push(part);
+                    }
+                } catch (correctionError) {
+                    console.error('AI correction service failed:', correctionError);
+                    processedParts.push(part);
+                }
+            }
+        } else {
+            processedParts.push(part);
+        }
+    }
+    return processedParts.join('');
 }
 
-export async function generateTaskBreakdown(taskTitle: string, taskDescription: string): Promise<string[]> {
-    const model = 'gemini-2.5-flash';
-    const prompt = `Break down the following task into a list of smaller, actionable sub-tasks.
-Task Title: "${taskTitle}"
-Task Description: "${taskDescription}"
-Respond with ONLY a JSON array of strings. Each string is a sub-task.
-Do not include any other text, markdown, or explanation.`;
-
-    const response = await ai.models.generateContent({
-        model,
-        contents: prompt,
-        config: {
-            responseMimeType: 'application/json',
-            responseSchema: {
-                type: Type.ARRAY,
-                items: { type: Type.STRING },
-            },
-        },
-    });
-
-    const text = response.text;
-    if (!text) {
-        throw new Error("The AI returned an empty response. This might be due to content restrictions or a network issue. Please try again.");
-    }
-    const jsonString = text.trim();
-    const parsed = JSON.parse(jsonString);
-    return parsed as string[];
+// Helper to wait for KaTeX to be loaded, preventing race conditions.
+function ensureKatexIsLoaded(timeout = 7000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const startTime = Date.now();
+    const interval = setInterval(() => {
+      if (window.katex && window.renderMathInElement) {
+        clearInterval(interval);
+        resolve();
+      } else if (Date.now() - startTime > timeout) {
+        clearInterval(interval);
+        reject(new Error("KaTeX failed to load in time for verification."));
+      }
+    }, 100);
+  });
 }
 
-export async function generateLearningTips(taskTitle: string): Promise<string> {
-    const model = 'gemini-2.5-flash';
-    const prompt = `Provide concise, actionable learning tips for the topic "${taskTitle}".
-Focus on strategies for better understanding and retention.
-Format the response as a simple HTML list (ul/li).
-Do not include a full HTML document structure, just the list itself.`;
 
-    const response = await ai.models.generateContent({
-        model,
-        contents: prompt,
-    });
-    return response.text || '';
+export async function verifyAndCorrectFlashcards(flashcards: Flashcard[]): Promise<Flashcard[]> {
+    try {
+        await ensureKatexIsLoaded();
+    } catch (error: any) {
+        const errorMsg = error.message || "KaTeX script not loaded! Cannot verify flashcards.";
+        console.error(errorMsg);
+        alert(errorMsg);
+        return flashcards;
+    }
+
+    const testDiv = document.createElement('div');
+    testDiv.style.visibility = 'hidden';
+    testDiv.style.position = 'absolute';
+    document.body.appendChild(testDiv);
+
+    const correctedFlashcards = await Promise.all(
+        flashcards.map(async (card) => {
+            const correctedQuestion = await processTextForCorrection(card.question, testDiv);
+            const correctedAnswer = await processTextForCorrection(card.answer, testDiv);
+            return { question: correctedQuestion, answer: correctedAnswer };
+        })
+    );
+    
+    document.body.removeChild(testDiv);
+    return correctedFlashcards;
 }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Task, TaskStatus, AIAssistantMode, Flashcard, Priority } from '../types';
+import { Task, TaskStatus, AIAssistantMode, Flashcard, Priority, FlashcardDeck } from '../types';
 import TaskCard from './TaskCard';
 import { STATUS_COLORS } from '../constants';
 
@@ -14,7 +14,8 @@ interface KanbanColumnProps {
   onUpdateTaskPriority: (taskId: string, newPriority: Priority) => void;
   onUpdateTaskDueDate: (taskId: string, newDueDate: string) => void;
   onOpenAIAssistant: (mode: AIAssistantMode, task: Task) => void;
-  onOpenFlashcardTask: (flashcards: Flashcard[]) => void;
+  // FIX: Changed prop type from Flashcard[] to FlashcardDeck to match the handler in App.tsx.
+  onOpenFlashcardTask: (deck: FlashcardDeck) => void;
 }
 
 // Helper to determine if a date is in the future (and not today)

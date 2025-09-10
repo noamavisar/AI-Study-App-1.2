@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Task, AIAssistantMode, Flashcard, Priority } from '../types';
+import { Task, AIAssistantMode, Flashcard, Priority, FlashcardDeck, Subtask } from '../types';
 import { PRIORITY_COLORS, PRIORITIES } from '../constants';
 
 interface TaskCardProps {
@@ -12,7 +12,8 @@ interface TaskCardProps {
   onUpdateTaskPriority: (taskId: string, newPriority: Priority) => void;
   onUpdateTaskDueDate: (taskId: string, newDueDate: string) => void;
   onOpenAIAssistant: (mode: AIAssistantMode, task: Task) => void;
-  onOpenFlashcardTask: (flashcards: Flashcard[]) => void;
+  // FIX: Changed prop type from Flashcard[] to FlashcardDeck to match the handler in App.tsx.
+  onOpenFlashcardTask: (deck: FlashcardDeck) => void;
   sharedDateColor?: string;
 }
 
@@ -28,7 +29,6 @@ const getDateStatus = (dueDateString?: string) => {
         const dueDate = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
 
         const formattedDate = dueDate.toLocaleDateString(undefined, {
-            year: 'numeric',
             month: 'short',
             day: 'numeric',
             timeZone: 'UTC',
@@ -61,6 +61,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onDeleteTask, onAddSubtask, o
   
   const timeEditorRef = useRef<HTMLDivElement>(null);
   const priorityEditorRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
 
   const priorityConfig = PRIORITY_COLORS[task.priority];
   const { status: dateStatus, display: displayDate } = getDateStatus(task.dueDate);
@@ -68,69 +69,26 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onDeleteTask, onAddSubtask, o
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (timeEditorRef.current && !timeEditorRef.current.contains(event.target as Node)) {
-        setIsEditingTime(false);
+        if (isEditingTime) handleTimeSave();
       }
       if (priorityEditorRef.current && !priorityEditorRef.current.contains(event.target as Node)) {
         setIsEditingPriority(false);
       }
     }
-    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener('mousedown', handleClickOutside);
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [timeEditorRef, priorityEditorRef]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditingTime]);
 
-  const handleTitleSave = () => {
-    if (editedTitle.trim() && editedTitle.trim() !== task.title) {
-      onUpdateTask(task.id, { title: editedTitle.trim() });
-    } else {
-      setEditedTitle(task.title); // Revert if empty or unchanged
-    }
-    setIsEditingTitle(false);
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
+    e.dataTransfer.setData("taskId", task.id);
+    e.currentTarget.style.opacity = '0.5';
   };
   
-  const handleTitleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleTitleSave();
-    } else if (e.key === 'Escape') {
-      setEditedTitle(task.title);
-      setIsEditingTitle(false);
-    }
-  };
-
-  const handleDescriptionSave = () => {
-    if (editedDescription.trim() !== task.description) {
-      onUpdateTask(task.id, { description: editedDescription.trim() });
-    }
-    setIsEditingDescription(false);
-  };
-  
-  const handleDescriptionKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault(); // prevent new line on save
-        handleDescriptionSave();
-    } else if (e.key === 'Escape') {
-      setEditedDescription(task.description);
-      setIsEditingDescription(false);
-    }
-  };
-
-  const handleAddTimeSubmit = () => {
-    if (editedTime > 0) {
-      onUpdateTaskTime(task.id, editedTime);
-    } else {
-        setEditedTime(task.estimatedTime);
-    }
-    setIsEditingTime(false);
-  };
-  
-  const handleTimeEditKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleAddTimeSubmit();
-    } else if (e.key === 'Escape') {
-      setEditedTime(task.estimatedTime);
-      setIsEditingTime(false);
-    }
+  const handleDragEnd = (e: React.DragEvent<HTMLDivElement>) => {
+      e.currentTarget.style.opacity = '1';
   };
 
   const handleAddSubtask = (e: React.FormEvent) => {
@@ -140,254 +98,216 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onDeleteTask, onAddSubtask, o
       setNewSubtask('');
     }
   };
-  
-  const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
-    e.dataTransfer.setData("taskId", task.id);
-    e.dataTransfer.setData("sourceStatus", task.status);
-    e.currentTarget.style.opacity = '0.5';
+
+  const handleTitleBlur = () => {
+    if (editedTitle.trim() && editedTitle.trim() !== task.title) {
+      onUpdateTask(task.id, { title: editedTitle.trim() });
+    }
+    setIsEditingTitle(false);
+  };
+
+  const handleDescriptionBlur = () => {
+    if (editedDescription !== task.description) {
+      onUpdateTask(task.id, { description: editedDescription });
+    }
+    setIsEditingDescription(false);
+  };
+
+  const handleTimeSave = () => {
+    if (editedTime !== task.estimatedTime) {
+      onUpdateTaskTime(task.id, editedTime);
+    }
+    setIsEditingTime(false);
   };
   
-  const handleDragEnd = (e: React.DragEvent<HTMLDivElement>) => {
-    e.currentTarget.style.opacity = '1';
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    onUpdateTaskDueDate(task.id, e.target.value);
+    setIsEditingDate(false);
   };
 
   const handlePriorityChange = (newPriority: Priority) => {
-    onUpdateTaskPriority(task.id, newPriority);
-    setIsEditingPriority(false);
+      onUpdateTaskPriority(task.id, newPriority);
+      setIsEditingPriority(false);
+  }
+
+  const handleOpenFlashcardTaskInternal = () => {
+    if (task.flashcards && task.flashcards.length > 0) {
+      const tempDeck: FlashcardDeck = {
+        id: `task-${task.id}-${Date.now()}`,
+        name: `Flashcards for "${task.title}"`,
+        flashcards: task.flashcards,
+        createdAt: new Date().toISOString(),
+      };
+      onOpenFlashcardTask(tempDeck);
+    }
   };
-
-  const completedSubtasks = (task.subtasks || []).filter(s => s.completed).length;
-  const totalSubtasks = (task.subtasks || []).length;
-  const progress = totalSubtasks > 0 ? (completedSubtasks / totalSubtasks) * 100 : 0;
   
-  const topBorderColorClass =
-    dateStatus === 'overdue' ? 'border-t-red-500' :
-    dateStatus === 'today' ? 'border-t-green-500' :
-    (dateStatus === 'upcoming' && sharedDateColor) ? sharedDateColor :
-    'border-t-transparent';
+  const subtasks = task.subtasks || [];
+  const completedSubtasks = subtasks.filter(st => st.completed).length;
+  const progress = subtasks.length > 0 ? (completedSubtasks / subtasks.length) * 100 : 0;
 
-  const cardClasses = [
-    'p-4 rounded-lg shadow-md border-l-4 border-t-4 transition-shadow hover:shadow-lg cursor-grab active:cursor-grabbing',
-    'border-r-transparent border-b-transparent', // Explicitly make other borders transparent
-    priorityConfig.bg,
-    priorityConfig.border, // This will be like 'border-l-green-500'
-    topBorderColorClass,
-  ].filter(Boolean).join(' ');
+  let dateClasses = 'cursor-pointer';
+  if (sharedDateColor) {
+    dateClasses += ` border-t-2 ${sharedDateColor}`;
+  } else if (dateStatus === 'overdue') {
+    dateClasses += ' text-red-600 dark:text-red-400 font-semibold';
+  } else if (dateStatus === 'today') {
+    dateClasses += ' text-green-600 dark:text-green-400 font-semibold';
+  }
 
   return (
-    <div 
+    <div
+      ref={cardRef}
+      data-task-id={task.id}
       draggable
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
-      className={cardClasses}
-      data-task-id={task.id}
+      className={`p-3 rounded-lg shadow-md border-l-4 ${priorityConfig.bg} ${priorityConfig.border} group transition-shadow hover:shadow-xl space-y-3`}
     >
+      {/* Header: Title and Delete */}
       <div className="flex justify-between items-start">
-        <div className="flex-grow min-w-0 mr-2">
-          {task.day && <p className="text-xs font-bold uppercase tracking-wider text-jam-blue dark:text-pink-400 mb-1">Day {task.day}</p>}
-          {isEditingTitle ? (
-            <input
-              type="text"
-              value={editedTitle}
-              onChange={(e) => setEditedTitle(e.target.value)}
-              onBlur={handleTitleSave}
-              onKeyDown={handleTitleKeyDown}
-              className="font-bold text-md mb-2 bg-white/50 dark:bg-slate-900/50 border border-jam-border dark:border-slate-600 rounded-md py-1 px-1.5 w-full text-jam-dark dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-jam-blue dark:focus:ring-pink-500"
-              autoFocus
-            />
-          ) : (
-            <h3 
-              onClick={() => { setEditedTitle(task.title); setIsEditingTitle(true); }}
-              className={`font-bold text-md mb-2 ${priorityConfig.text} cursor-text hover:bg-black/10 dark:hover:bg-white/10 p-1 -m-1 rounded break-words`}
-            >
-              {task.title}
-            </h3>
-          )}
-        </div>
-        <button onClick={() => onDeleteTask(task.id)} className="text-slate-400 hover:text-red-500 transition-colors flex-shrink-0 ml-2">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
+        {isEditingTitle ? (
+          <input
+            type="text"
+            value={editedTitle}
+            onChange={(e) => setEditedTitle(e.target.value)}
+            onBlur={handleTitleBlur}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleTitleBlur(); if (e.key === 'Escape') setIsEditingTitle(false); }}
+            className={`-m-1 p-1 w-full bg-white/50 dark:bg-slate-900/50 rounded-md text-md font-bold ${priorityConfig.text} focus:outline-none focus:ring-2 focus:ring-jam-blue dark:focus:ring-pink-500`}
+            autoFocus
+          />
+        ) : (
+          <h3 onClick={() => setIsEditingTitle(true)} className={`text-md font-bold cursor-pointer ${priorityConfig.text}`}>
+            {task.title}
+          </h3>
+        )}
+        <button onClick={() => onDeleteTask(task.id)} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition-opacity ml-2 flex-shrink-0" title="Delete Task">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
         </button>
       </div>
-      
+
+      {/* Description */}
       {isEditingDescription ? (
-        <textarea
-          value={editedDescription}
-          onChange={(e) => setEditedDescription(e.target.value)}
-          onBlur={handleDescriptionSave}
-          onKeyDown={handleDescriptionKeyDown}
-          rows={3}
-          className="text-sm mb-3 w-full bg-white/50 dark:bg-slate-900/50 border border-jam-border dark:border-slate-600 rounded-md py-1 px-1.5 text-jam-dark dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-jam-blue dark:focus:ring-pink-500"
-          autoFocus
-        />
+         <textarea
+            value={editedDescription}
+            onChange={(e) => setEditedDescription(e.target.value)}
+            onBlur={handleDescriptionBlur}
+            className={`-m-1 p-1 mt-1 text-sm w-full bg-white/50 dark:bg-slate-900/50 rounded-md resize-y ${priorityConfig.text} focus:outline-none focus:ring-2 focus:ring-jam-blue dark:focus:ring-pink-500`}
+            rows={3}
+            autoFocus
+          />
       ) : (
-        <p 
-          onClick={() => { setEditedDescription(task.description); setIsEditingDescription(true); }}
-          className={`text-sm mb-3 ${priorityConfig.text}/80 cursor-text hover:bg-black/10 dark:hover:bg-white/10 p-1 -m-1 rounded min-h-[20px] whitespace-pre-wrap break-words`}
-        >
-          {task.description || <span className="text-slate-400 italic">Click to add description</span>}
-        </p>
+        (task.description) && (
+            <p onClick={() => setIsEditingDescription(true)} className={`text-sm whitespace-pre-wrap cursor-pointer ${priorityConfig.text}`}>
+                {task.description}
+            </p>
+        )
       )}
-      
-      <div className="mb-3">
-        {isEditingDate ? (
-            <input
-                type="date"
-                value={task.dueDate || ''}
-                onChange={(e) => {
-                    onUpdateTaskDueDate(task.id, e.target.value);
-                    setIsEditingDate(false);
-                }}
-                onBlur={() => setIsEditingDate(false)}
-                className="bg-white/50 dark:bg-slate-900/50 border border-jam-border dark:border-slate-600 rounded-md py-0.5 px-1.5 text-xs text-jam-dark dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-jam-blue dark:focus:ring-pink-500"
-                autoFocus
-            />
-        ) : (
-            displayDate && (
-                <button
-                    onClick={() => setIsEditingDate(true)}
-                    className={`flex items-center text-xs font-semibold p-1 -ml-1 rounded-md hover:bg-black/10 dark:hover:bg-white/10 ${
-                        dateStatus === 'overdue' ? 'text-red-600 dark:text-red-400' :
-                        dateStatus === 'today' ? 'text-green-600 dark:text-green-500' :
-                        'text-slate-500 dark:text-slate-400'
-                    }`}
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 mr-1.5 flex-shrink-0">
-                        <path d="M8 1.75a.75.75 0 0 1 .75.75V4h-1.5V2.5A.75.75 0 0 1 8 1.75Z" />
-                        <path fillRule="evenodd" d="M3.75 4a.75.75 0 0 0-.75.75V12.5c0 .414.336.75.75.75h8.5a.75.75 0 0 0 .75-.75V4.75a.75.75 0 0 0-.75-.75h-1V2.5a2.25 2.25 0 0 0-4.5 0V4h-1Zm-1.5 1.5v7.25c0 1.243 1.007 2.25 2.25 2.25h8.5c1.243 0 2.25-1.007 2.25-2.25V5.5A2.25 2.25 0 0 0 12.25 3.25h-.5V2.5a3.75 3.75 0 0 0-7.5 0v.75h-.5A2.25 2.25 0 0 0 2.25 5.5Z" clipRule="evenodd" />
-                    </svg>
-                    <span>Due: {displayDate}</span>
-                    {dateStatus === 'overdue' && <span className="ml-2 px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-700 dark:text-red-300">Overdue</span>}
-                    {dateStatus === 'today' && <span className="ml-2 px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-700 dark:text-green-300">Today</span>}
-                </button>
-            )
-        )}
-      </div>
 
-      <div className="flex items-center space-x-2 text-xs mb-4">
-        <div className="relative" ref={priorityEditorRef}>
-            <button
-                onClick={() => setIsEditingPriority(prev => !prev)}
-                className={`px-2 py-1 rounded-full font-semibold ${priorityConfig.tagBg} ${priorityConfig.tagText} hover:ring-2 hover:ring-slate-400 dark:hover:ring-slate-500 transition-shadow`}
-                aria-label={`Change priority, current is ${task.priority}`}
-            >
-              {task.priority}
-            </button>
-            {isEditingPriority && (
-                <div className="absolute z-10 mt-2 -ml-2 w-56 origin-top-left rounded-md bg-white dark:bg-slate-800 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
-                    <div className="py-1">
-                        {PRIORITIES.map(p => (
-                            <button
-                                key={p}
-                                onClick={() => handlePriorityChange(p)}
-                                className={`w-full text-left px-4 py-2 text-sm ${
-                                  task.priority === p 
-                                  ? 'bg-slate-100 dark:bg-slate-700 text-jam-dark dark:text-slate-100' 
-                                  : 'text-slate-700 dark:text-slate-300'
-                                } hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center space-x-3`}
-                            >
-                                <span className={`w-3 h-3 rounded-full ${PRIORITY_COLORS[p].bg.split(' ')[0]}`}></span>
-                                <span>{p}</span>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            )}
-        </div>
-        {isEditingTime ? (
-            <div ref={timeEditorRef} className="flex items-center space-x-1">
-                <input
-                    type="number"
-                    value={editedTime}
-                    onChange={(e) => setEditedTime(parseInt(e.target.value, 10) || 0)}
-                    onKeyDown={handleTimeEditKeyDown}
-                    className="w-16 bg-white/50 dark:bg-slate-900/50 border border-jam-border dark:border-slate-600 rounded-md py-0.5 px-1.5 text-xs text-jam-dark dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-jam-blue dark:focus:ring-pink-500"
-                    autoFocus
-                />
-                <button onClick={handleAddTimeSubmit} className="p-1 rounded-full bg-green-500/20 text-green-700 dark:text-green-300 hover:bg-green-500/40" aria-label="Save time">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path fillRule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.354 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clipRule="evenodd" /></svg>
+      {/* Tags: Priority, Due Date, Time */}
+      <div className="flex flex-wrap gap-2 items-center text-xs">
+        {/* Priority Tag */}
+        <div ref={priorityEditorRef} className="relative">
+          <button onClick={() => setIsEditingPriority(!isEditingPriority)} className={`flex items-center space-x-1 px-2 py-1 rounded-full ${priorityConfig.tagBg} ${priorityConfig.tagText} font-semibold`}>
+            <span>{task.priority}</span>
+          </button>
+          {isEditingPriority && (
+            <div className="absolute z-10 mt-1 w-48 bg-white dark:bg-slate-800 rounded-md shadow-lg border border-jam-border dark:border-slate-700">
+              {PRIORITIES.map(p => (
+                <button key={p} onClick={() => handlePriorityChange(p)} className="block w-full text-left px-3 py-2 text-sm text-jam-dark dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700">
+                  {p}
                 </button>
-                <button onClick={() => setIsEditingTime(false)} className="p-1 rounded-full bg-red-500/20 text-red-700 dark:text-red-300 hover:bg-red-500/40" aria-label="Cancel edit time">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" /></svg>
-                </button>
+              ))}
             </div>
-        ) : (
-            <button 
-                onClick={() => { setEditedTime(task.estimatedTime); setIsEditingTime(true); }}
-                className={`px-2 py-1 rounded-full font-semibold ${priorityConfig.tagBg} ${priorityConfig.tagText} flex items-center hover:ring-2 hover:ring-slate-400 dark:hover:ring-slate-500 transition-shadow`}
-                aria-label={`Edit estimated time, current is ${task.estimatedTime} minutes`}
-            >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 mr-1"><path fillRule="evenodd" d="M8 1.75a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-1.5 0V2.5A.75.75 0 0 1 8 1.75Z" clipRule="evenodd" /><path d="M5.75 8a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5A.75.75 0 0 1 5.75 8Zm-2.22.72a.75.75 0 1 0 1.06 1.06l1.72-1.72a.75.75 0 1 0-1.06-1.06l-1.72 1.72Zm10.44 0a.75.75 0 1 0-1.06 1.06l1.72 1.72a.75.75 0 1 0 1.06-1.06l-1.72-1.72ZM8 14.25a6.25 6.25 0 1 0 0-12.5 6.25 6.25 0 0 0 0 12.5Zm0-1.5a4.75 4.75 0 1 0 0-9.5 4.75 4.75 0 0 0 0 9.5Z" /></svg>
-                {task.estimatedTime} min
-            </button>
+          )}
+        </div>
+        {/* Due Date Tag */}
+        {displayDate && (
+            <div className="relative">
+                {isEditingDate ? (
+                    <input
+                        type="date"
+                        defaultValue={task.dueDate}
+                        onBlur={() => setIsEditingDate(false)}
+                        onChange={handleDateChange}
+                        className={`px-2 py-1 rounded-full ${priorityConfig.tagBg} ${priorityConfig.tagText} font-semibold bg-transparent focus:outline-none focus:ring-1 focus:ring-jam-blue dark:focus:ring-pink-500`}
+                        autoFocus
+                    />
+                ) : (
+                    <button onClick={() => setIsEditingDate(true)} className={`flex items-center space-x-1 px-2 py-1 rounded-full ${priorityConfig.tagBg} ${dateClasses}`}>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path d="M8.25 2a.75.75 0 0 1 .75.75V4h.25a2 2 0 0 1 2 2v5.5a2 2 0 0 1-2 2H4.75a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h.25V2.75a.75.75 0 0 1 1.5 0V4h3V2.75a.75.75 0 0 1 .75-.75ZM4.75 5.5A.5.5 0 0 0 4.25 6v5.5a.5.5 0 0 0 .5.5h6.5a.5.5 0 0 0 .5-.5V6a.5.5 0 0 0-.5-.5h-6.5Z" /></svg>
+                        <span>{displayDate}</span>
+                    </button>
+                )}
+            </div>
         )}
+        {/* Time Tag */}
+        <div ref={timeEditorRef} className="relative">
+          {isEditingTime ? (
+            <div className="flex items-center space-x-1">
+              <input
+                type="number"
+                value={editedTime}
+                onChange={(e) => setEditedTime(parseInt(e.target.value, 10) || 0)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleTimeSave(); if (e.key === 'Escape') setIsEditingTime(false); }}
+                className={`w-16 px-2 py-1 rounded-full ${priorityConfig.tagBg} ${priorityConfig.tagText} font-semibold bg-transparent focus:outline-none focus:ring-1 focus:ring-jam-blue dark:focus:ring-pink-500`}
+                autoFocus
+              />
+              <button onClick={handleTimeSave} className={`text-green-500 ${priorityConfig.tagText}`}>✓</button>
+            </div>
+          ) : (
+            <button onClick={() => setIsEditingTime(true)} className={`flex items-center space-x-1 px-2 py-1 rounded-full ${priorityConfig.tagBg} ${priorityConfig.tagText}`}>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path fillRule="evenodd" d="M8 15A7 7 0 1 0 8 1a7 7 0 0 0 0 14Zm.75-10.25a.75.75 0 0 0-1.5 0v3.5c0 .24.141.458.358.583l2.5 1.5a.75.75 0 0 0 .866-1.25L8.75 8.31V4.75Z" clipRule="evenodd" /></svg>
+              <span>{task.estimatedTime} min</span>
+            </button>
+          )}
+        </div>
       </div>
 
-      {totalSubtasks > 0 && (
-        <div className="mb-4">
-          <div className="flex justify-between items-center mb-1">
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Sub-tasks</span>
-            <span className="text-xs text-slate-500 dark:text-slate-400">{completedSubtasks}/{totalSubtasks}</span>
+      {/* Subtasks */}
+      {subtasks.length > 0 && (
+        <div className="space-y-2 pt-2">
+          <div className="w-full bg-slate-200/50 dark:bg-slate-900/50 rounded-full h-1.5">
+            <div className="bg-jam-blue dark:bg-pink-500 h-1.5 rounded-full" style={{ width: `${progress}%` }}></div>
           </div>
-          <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5">
-            <div className="bg-jam-green h-1.5 rounded-full" style={{ width: `${progress}%` }}></div>
-          </div>
-        </div>
-      )}
-
-      {(task.subtasks && task.subtasks.length > 0) && (
-        <div className="space-y-2 mb-3 max-h-32 overflow-y-auto pr-2">
-          {task.subtasks.map(subtask => (
+          {subtasks.map((subtask: Subtask) => (
             <div key={subtask.id} className="flex items-center text-sm">
               <input
                 type="checkbox"
-                id={`subtask-${subtask.id}`}
                 checked={subtask.completed}
                 onChange={() => onToggleSubtask(task.id, subtask.id)}
                 className="w-4 h-4 text-jam-blue bg-slate-100 border-slate-300 rounded focus:ring-jam-blue dark:focus:ring-pink-600 dark:ring-offset-slate-800 focus:ring-2 dark:bg-slate-700 dark:border-slate-600"
               />
-              <label htmlFor={`subtask-${subtask.id}`} className={`ml-2 ${subtask.completed ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-300'}`}>
-                {subtask.text}
-              </label>
+              <label className={`ml-2 ${subtask.completed ? 'line-through text-slate-400' : `${priorityConfig.text}`}`}>{subtask.text}</label>
             </div>
           ))}
         </div>
       )}
 
-      <form onSubmit={handleAddSubtask} className="flex space-x-2 mb-4">
+      {/* Add Subtask Form */}
+      <form onSubmit={handleAddSubtask} className="flex items-center space-x-2 pt-1">
         <input
           type="text"
           value={newSubtask}
           onChange={(e) => setNewSubtask(e.target.value)}
-          placeholder="Add a new sub-task..."
-          className="flex-grow bg-white/50 dark:bg-slate-900/50 border border-jam-border dark:border-slate-600 rounded-md shadow-sm py-1 px-2 text-sm text-jam-dark dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-jam-blue dark:focus:ring-pink-500"
+          placeholder="Add a sub-task..."
+          className={`flex-grow bg-transparent text-sm placeholder-slate-400 ${priorityConfig.text} border-b border-slate-300/50 dark:border-slate-600/50 focus:outline-none focus:border-jam-blue dark:focus:border-pink-500`}
         />
-        <button type="submit" className="px-2 py-1 text-xs font-semibold text-white bg-jam-dark rounded-md hover:bg-black dark:bg-slate-600 dark:hover:bg-slate-500">+</button>
+        <button type="submit" className="text-slate-400 hover:text-jam-dark dark:hover:text-pink-500" title="Add Subtask">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4"><path d="M8.75 3.75a.75.75 0 0 0-1.5 0v3.5h-3.5a.75.75 0 0 0 0 1.5h3.5v3.5a.75.75 0 0 0 1.5 0v-3.5h3.5a.75.75 0 0 0 0-1.5h-3.5v-3.5Z" /></svg>
+        </button>
       </form>
-
-      <div className="border-t border-jam-border dark:border-slate-700 pt-3 flex items-center justify-between space-x-2">
-        <div className="flex items-center space-x-1">
-          <button onClick={() => onOpenAIAssistant('breakdown', task)} className="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors" title="Breakdown task with AI">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M14.22 2.22a.75.75 0 0 0-1.06 0l-8.5 8.5a.75.75 0 0 0 0 1.06l1.5 1.5a.75.75 0 0 0 1.06 0l8.5-8.5a.75.75 0 0 0 0-1.06l-1.5-1.5Zm-1.04 9.46-6.94-6.94l.47-.47 6.94 6.94-.47.47Z" /><path d="M3.5 12.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2ZM5.5 10.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2ZM7.5 8.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2ZM9.5 6.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z" /></svg>
-          </button>
-          <button onClick={() => onOpenAIAssistant('tips', task)} className="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors" title="Get learning tips from AI">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M10 2a.75.75 0 0 1 .75.75v1.25a.75.75 0 0 1-1.5 0V2.75A.75.75 0 0 1 10 2ZM5.207 5.207a.75.75 0 0 1 1.06 0l.707.707a.75.75 0 0 1-1.06 1.06l-.707-.707a.75.75 0 0 1 0-1.06ZM2 10a.75.75 0 0 1 .75-.75h1.25a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 10ZM5.914 14.086a.75.75 0 0 1 0-1.06l.707-.707a.75.75 0 1 1 1.06 1.06l-.707.707a.75.75 0 0 1-1.06 0ZM14.086 5.914a.75.75 0 0 1 1.06 0l.707.707a.75.75 0 0 1-1.06 1.06l-.707-.707a.75.75 0 0 1 0-1.06ZM18 10a.75.75 0 0 1 .75-.75h1.25a.75.75 0 0 1 0 1.5H18.75A.75.75 0 0 1 18 10ZM13.379 13.379a.75.75 0 0 1 1.06 0l.707.707a.75.75 0 0 1-1.06 1.06l-.707-.707a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" /><path d="m10 6.25c-1.933 0-3.5 1.567-3.5 3.5s1.567 3.5 3.5 3.5 3.5-1.567 3.5-3.5-1.567-3.5-3.5-3.5Z" /></svg>
-          </button>
-        </div>
-        
-        {task.flashcards && task.flashcards.length > 0 ? (
-            <button
-                onClick={() => onOpenFlashcardTask(task.flashcards!)}
-                className="flex items-center space-x-2 px-3 py-1 text-xs font-semibold rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
-                title="Study Flashcards"
-            >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-                    <path fillRule="evenodd" d="M2.5 3A1.5 1.5 0 0 0 1 4.5v11A1.5 1.5 0 0 0 2.5 17h15A1.5 1.5 0 0 0 19 15.5v-11A1.5 1.5 0 0 0 17.5 3h-15Zm3.5 2a.5.5 0 0 0-.5.5v2a.5.5 0 0 0 .5.5h2a.5.5 0 0 0 .5-.5v-2a.5.5 0 0 0-.5-.5h-2ZM6 9.5a.5.5 0 0 1 .5-.5h8a.5.5 0 0 1 .5.5v.75a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-.75Zm.5 2.25a.5.5 0 0 0-.5.5v.75a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5v-.75a.5.5 0 0 0-.5-.5h-4Z" clipRule="evenodd" />
-                </svg>
-                <span>Study Cards</span>
+      
+      {/* AI & Flashcard Actions */}
+      <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-200/50 dark:border-slate-700/50 -mx-3 px-3 -mb-3 pb-3">
+        {(task.flashcards && task.flashcards.length > 0) && (
+            <button onClick={handleOpenFlashcardTaskInternal} className="flex items-center space-x-1 text-xs px-2 py-1 rounded-md text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-700/50" title="Study Flashcards for this task">
+                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4"><path d="M2.5 3.5A1.5 1.5 0 0 0 1 5v6A1.5 1.5 0 0 0 2.5 12.5h11A1.5 1.5 0 0 0 15 11V5a1.5 1.5 0 0 0-1.5-1.5h-11Zm-1.5 8v1A1.5 1.5 0 0 0 2.5 14h11a1.5 1.5 0 0 0 1.5-1.5v-1a.5.5 0 0 0-1 0v.5a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-.5a.5.5 0 0 0-1 0Z" /></svg>
             </button>
-        ) : (
-            <div className="flex-grow"></div>
         )}
+        <button onClick={() => onOpenAIAssistant('breakdown', task)} className="flex items-center space-x-1 text-xs px-2 py-1 rounded-md text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-700/50" title="Break down with AI">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M5 2a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 5 2ZM5.75 6a.75.75 0 0 0-1.5 0v1.5a.75.75 0 0 0 1.5 0V6Zm-1.5 3.75a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5a.75.75 0 0 1-.75-.75Zm2.25.75a.75.75 0 0 0 0-1.5h8.5a.75.75 0 0 0 0 1.5h-8.5Zm0-3a.75.75 0 0 0 0-1.5h8.5a.75.75 0 0 0 0 1.5h-8.5Zm0-3a.75.75 0 0 0 0-1.5h8.5a.75.75 0 0 0 0 1.5h-8.5Z" clipRule="evenodd" /></svg>
+        </button>
       </div>
     </div>
   );
