@@ -101,12 +101,12 @@ const FlashcardsModal: React.FC<FlashcardsModalProps> = ({ isOpen, onClose, flas
             }`}
           >
             {/* Front Face */}
-            <div className="absolute w-full h-full p-6 flex items-center justify-center text-center [backface-visibility:hidden] overflow-y-auto bg-white dark:bg-slate-700 border border-jam-border dark:border-slate-600 rounded-lg">
-              <div ref={frontContentRef} dir="auto" className="prose prose-lg dark:prose-invert max-w-none break-words w-full text-left"></div>
+            <div className="absolute w-full h-full p-6 flex items-start justify-center [backface-visibility:hidden] overflow-y-auto bg-white dark:bg-slate-700 border border-jam-border dark:border-slate-600 rounded-lg">
+              <div ref={frontContentRef} dir="auto" className="prose prose-lg dark:prose-invert max-w-none break-words w-full"></div>
             </div>
             {/* Back Face */}
-            <div className="absolute w-full h-full p-6 flex items-center justify-center text-center [backface-visibility:hidden] overflow-y-auto bg-slate-100 dark:bg-slate-900 [transform:rotateY(180deg)] border border-jam-border dark:border-slate-600 rounded-lg">
-              <div ref={backContentRef} dir="auto" className="prose prose-lg dark:prose-invert max-w-none break-words w-full text-left"></div>
+            <div className="absolute w-full h-full p-6 flex items-start justify-center [backface-visibility:hidden] overflow-y-auto bg-slate-100 dark:bg-slate-900 [transform:rotateY(180deg)] border border-jam-border dark:border-slate-600 rounded-lg">
+              <div ref={backContentRef} dir="auto" className="prose prose-lg dark:prose-invert max-w-none break-words w-full"></div>
             </div>
           </div>
         </div>
