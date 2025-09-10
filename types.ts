@@ -1,3 +1,5 @@
+// FIX: Removed self-import which was causing declaration conflicts.
+
 export enum TaskStatus {
   ToDo = 'To Do',
   InProgress = 'In Progress',
@@ -28,6 +30,13 @@ export interface Subtask {
 export interface Flashcard {
   question: string;
   answer: string;
+}
+
+export interface FlashcardDeck {
+  id: string;
+  topic: string;
+  flashcards: Flashcard[];
+  createdAt: string;
 }
 
 export interface ProjectFile {
@@ -68,6 +77,7 @@ export interface Project {
   timerSettings: TimerSettings;
   pomodoros: number;
   files: ProjectFile[];
+  flashcardDecks: FlashcardDeck[];
 }
 
 export interface LastDeletedTaskInfo {

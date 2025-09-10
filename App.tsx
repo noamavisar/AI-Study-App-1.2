@@ -16,7 +16,8 @@ import ProjectFilesModal from './components/ProjectFilesModal';
 import LearningTipBar from './components/LearningTipBar';
 import UndoToast from './components/UndoToast';
 import ConfirmationModal from './components/ConfirmationModal';
-import { Task, TaskStatus, Priority, Project, Subtask, AIAssistantMode, Flashcard, ResourceType, ProjectFile, LastDeletedTaskInfo } from './types';
+import FlashcardLibrary from './components/FlashcardLibrary';
+import { Task, TaskStatus, Priority, Project, Subtask, AIAssistantMode, Flashcard, ResourceType, ProjectFile, LastDeletedTaskInfo, FlashcardDeck } from './types';
 import { generateStudySprint, generateFlashcards, generateTaskBreakdown, generateLearningTips } from './services/geminiService';
 import { fileToDataUrl, dataUrlToFile, parseGoogleUrl } from './utils/fileUtils';
 import { setFile, getFile, deleteFile, clearFiles } from './utils/idb';
@@ -52,6 +53,7 @@ function useLocalStorage<T>(key: string, initialValue: T): [T, React.Dispatch<Re
               return {
                   ...createDefaultProject(), // ensure all keys exist
                   ...proj,
+                  flashcardDecks: proj.flashcardDecks || [], // Hydrate flashcard decks
                   tasks: newTasks,
                   files: proj.files?.map((f: any) => {
                       const { dataUrl, ...rest } = f; // Remove obsolete dataUrl
@@ -97,6 +99,7 @@ const createDefaultProject = (): Project => ({
   timerSettings: DEFAULT_TIMER_SETTINGS,
   pomodoros: 0,
   files: [],
+  flashcardDecks: [],
 });
 
 
@@ -125,8 +128,6 @@ const App: React.FC = () => {
 
   // Flashcards state
   const [currentFlashcards, setCurrentFlashcards] = useState<Flashcard[]>([]);
-  const [generatedFlashcards, setGeneratedFlashcards] = useState<Flashcard[]>([]);
-  const [flashcardTopic, setFlashcardTopic] = useState('');
 
   // Undo Delete State
   const [lastDeletedTask, setLastDeletedTask] = useState<LastDeletedTaskInfo | null>(null);
@@ -167,15 +168,8 @@ const App: React.FC = () => {
 
   // Project handlers
   const handleAddProject = (name: string) => {
-    const newProject: Project = {
-      id: uuidv4(),
-      name,
-      tasks: [],
-      brainDumpNotes: '',
-      timerSettings: DEFAULT_TIMER_SETTINGS,
-      pomodoros: 0,
-      files: [],
-    };
+    const newProject: Project = createDefaultProject();
+    newProject.name = name;
     setProjects(prev => [...prev, newProject]);
     setActiveProjectId(newProject.id);
   };
@@ -256,6 +250,14 @@ const App: React.FC = () => {
     };
     updateProject(activeProject.id, { tasks: [...activeProject.tasks, newTask] });
     setIsAddTaskModalOpen(false);
+  };
+
+  const handleUpdateTask = (taskId: string, updates: Partial<Task>) => {
+    if (!activeProject) return;
+    const newTasks = activeProject.tasks.map(t =>
+      t.id === taskId ? { ...t, ...updates } : t
+    );
+    updateProject(activeProject.id, { tasks: newTasks });
   };
 
   const handleTaskDrop = (draggedTaskId: string, targetTaskId: string | null, newStatus: TaskStatus) => {
@@ -445,8 +447,13 @@ const App: React.FC = () => {
     setAiIsLoading(true);
     try {
         const flashcards = await generateFlashcards(topic, files, linkFiles);
-        setFlashcardTopic(topic);
-        setGeneratedFlashcards(flashcards);
+        const newDeck: FlashcardDeck = {
+          id: uuidv4(),
+          topic: topic,
+          flashcards: flashcards,
+          createdAt: new Date().toISOString(),
+        };
+        updateProject(activeProject.id, { flashcardDecks: [...activeProject.flashcardDecks, newDeck] });
         setCurrentFlashcards(flashcards);
         setIsFlashcardGeneratorOpen(false);
         setIsFlashcardsModalOpen(true);
@@ -458,25 +465,17 @@ const App: React.FC = () => {
     }
   };
   
-  const handleSaveFlashcardsAsTask = () => {
-    if (!activeProject || generatedFlashcards.length === 0) return;
-    const newTask: Omit<Task, 'id' | 'status'> = {
-        title: `Study: Flashcards for ${flashcardTopic}`,
-        description: 'Review the generated flashcards to master the key concepts.',
-        priority: Priority.ImportantNotUrgent,
-        estimatedTime: 30,
-        flashcards: generatedFlashcards,
-    };
-    handleAddTask(newTask);
-    setIsFlashcardsModalOpen(false);
-    setGeneratedFlashcards([]);
-    setFlashcardTopic('');
-  };
-
-  const handleOpenFlashcardTask = (flashcards: Flashcard[]) => {
+  const handleStudyFlashcards = (flashcards: Flashcard[]) => {
     setCurrentFlashcards(flashcards);
     setIsFlashcardsModalOpen(true);
   };
+  
+  const handleDeleteFlashcardDeck = (deckId: string) => {
+    if (!activeProject) return;
+    const newDecks = activeProject.flashcardDecks.filter(deck => deck.id !== deckId);
+    updateProject(activeProject.id, { flashcardDecks: newDecks });
+  };
+
 
   // Other handlers
   const handleImportTasks = (importedTasks: Omit<Task, 'id'>[]) => {
@@ -610,11 +609,12 @@ const App: React.FC = () => {
                     onDeleteTask={handleDeleteTask}
                     onAddSubtask={handleAddSubtask}
                     onToggleSubtask={handleToggleSubtask}
+                    onUpdateTask={handleUpdateTask}
                     onUpdateTaskTime={handleUpdateTaskTime}
                     onUpdateTaskPriority={handleUpdateTaskPriority}
                     onUpdateTaskDueDate={handleUpdateTaskDueDate}
                     onOpenAIAssistant={handleOpenAIAssistant}
-                    onOpenFlashcardTask={handleOpenFlashcardTask}
+                    onOpenFlashcardTask={handleStudyFlashcards}
                 />
             </div>
             <div className="space-y-6">
@@ -623,6 +623,11 @@ const App: React.FC = () => {
                     pomodoros={activeProject.pomodoros}
                     onSettingsChange={(newSettings) => updateProject(activeProject.id, { timerSettings: newSettings })}
                     onPomodorosChange={(newCount) => updateProject(activeProject.id, { pomodoros: newCount })}
+                />
+                <FlashcardLibrary
+                  decks={activeProject.flashcardDecks}
+                  onStudyDeck={(deck) => handleStudyFlashcards(deck.flashcards)}
+                  onDeleteDeck={handleDeleteFlashcardDeck}
                 />
                 <BrainDump 
                     notes={activeProject.brainDumpNotes}
@@ -678,7 +683,6 @@ const App: React.FC = () => {
             isOpen={isFlashcardsModalOpen}
             onClose={() => setIsFlashcardsModalOpen(false)}
             flashcards={currentFlashcards}
-            onSave={generatedFlashcards.length > 0 ? handleSaveFlashcardsAsTask : undefined}
         />
       )}
 

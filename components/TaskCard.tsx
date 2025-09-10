@@ -7,6 +7,7 @@ interface TaskCardProps {
   onDeleteTask: (taskId: string) => void;
   onAddSubtask: (taskId: string, subtaskText: string) => void;
   onToggleSubtask: (taskId: string, subtaskId: string) => void;
+  onUpdateTask: (taskId: string, updates: Partial<Task>) => void;
   onUpdateTaskTime: (taskId: string, newTime: number) => void;
   onUpdateTaskPriority: (taskId: string, newPriority: Priority) => void;
   onUpdateTaskDueDate: (taskId: string, newDueDate: string) => void;
@@ -47,12 +48,16 @@ const getDateStatus = (dueDateString?: string) => {
 };
 
 
-const TaskCard: React.FC<TaskCardProps> = ({ task, onDeleteTask, onAddSubtask, onToggleSubtask, onUpdateTaskTime, onUpdateTaskPriority, onUpdateTaskDueDate, onOpenAIAssistant, onOpenFlashcardTask, sharedDateColor }) => {
+const TaskCard: React.FC<TaskCardProps> = ({ task, onDeleteTask, onAddSubtask, onToggleSubtask, onUpdateTask, onUpdateTaskTime, onUpdateTaskPriority, onUpdateTaskDueDate, onOpenAIAssistant, onOpenFlashcardTask, sharedDateColor }) => {
   const [newSubtask, setNewSubtask] = useState('');
   const [isEditingTime, setIsEditingTime] = useState(false);
   const [editedTime, setEditedTime] = useState(task.estimatedTime);
   const [isEditingPriority, setIsEditingPriority] = useState(false);
   const [isEditingDate, setIsEditingDate] = useState(false);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editedTitle, setEditedTitle] = useState(task.title);
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [editedDescription, setEditedDescription] = useState(task.description);
   
   const timeEditorRef = useRef<HTMLDivElement>(null);
   const priorityEditorRef = useRef<HTMLDivElement>(null);
@@ -74,6 +79,41 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onDeleteTask, onAddSubtask, o
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [timeEditorRef, priorityEditorRef]);
+
+  const handleTitleSave = () => {
+    if (editedTitle.trim() && editedTitle.trim() !== task.title) {
+      onUpdateTask(task.id, { title: editedTitle.trim() });
+    } else {
+      setEditedTitle(task.title); // Revert if empty or unchanged
+    }
+    setIsEditingTitle(false);
+  };
+  
+  const handleTitleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleTitleSave();
+    } else if (e.key === 'Escape') {
+      setEditedTitle(task.title);
+      setIsEditingTitle(false);
+    }
+  };
+
+  const handleDescriptionSave = () => {
+    if (editedDescription.trim() !== task.description) {
+      onUpdateTask(task.id, { description: editedDescription.trim() });
+    }
+    setIsEditingDescription(false);
+  };
+  
+  const handleDescriptionKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault(); // prevent new line on save
+        handleDescriptionSave();
+    } else if (e.key === 'Escape') {
+      setEditedDescription(task.description);
+      setIsEditingDescription(false);
+    }
+  };
 
   const handleAddTimeSubmit = () => {
     if (editedTime > 0) {
@@ -143,16 +183,50 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onDeleteTask, onAddSubtask, o
       data-task-id={task.id}
     >
       <div className="flex justify-between items-start">
-        <div>
+        <div className="flex-grow min-w-0 mr-2">
           {task.day && <p className="text-xs font-bold uppercase tracking-wider text-jam-blue dark:text-pink-400 mb-1">Day {task.day}</p>}
-          <h3 className={`font-bold text-md mb-2 ${priorityConfig.text}`}>{task.title}</h3>
+          {isEditingTitle ? (
+            <input
+              type="text"
+              value={editedTitle}
+              onChange={(e) => setEditedTitle(e.target.value)}
+              onBlur={handleTitleSave}
+              onKeyDown={handleTitleKeyDown}
+              className="font-bold text-md mb-2 bg-white/50 dark:bg-slate-900/50 border border-jam-border dark:border-slate-600 rounded-md py-1 px-1.5 w-full text-jam-dark dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-jam-blue dark:focus:ring-pink-500"
+              autoFocus
+            />
+          ) : (
+            <h3 
+              onClick={() => { setEditedTitle(task.title); setIsEditingTitle(true); }}
+              className={`font-bold text-md mb-2 ${priorityConfig.text} cursor-text hover:bg-black/10 dark:hover:bg-white/10 p-1 -m-1 rounded break-words`}
+            >
+              {task.title}
+            </h3>
+          )}
         </div>
         <button onClick={() => onDeleteTask(task.id)} className="text-slate-400 hover:text-red-500 transition-colors flex-shrink-0 ml-2">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
         </button>
       </div>
       
-      <p className={`text-sm mb-3 ${priorityConfig.text}/80`}>{task.description}</p>
+      {isEditingDescription ? (
+        <textarea
+          value={editedDescription}
+          onChange={(e) => setEditedDescription(e.target.value)}
+          onBlur={handleDescriptionSave}
+          onKeyDown={handleDescriptionKeyDown}
+          rows={3}
+          className="text-sm mb-3 w-full bg-white/50 dark:bg-slate-900/50 border border-jam-border dark:border-slate-600 rounded-md py-1 px-1.5 text-jam-dark dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-jam-blue dark:focus:ring-pink-500"
+          autoFocus
+        />
+      ) : (
+        <p 
+          onClick={() => { setEditedDescription(task.description); setIsEditingDescription(true); }}
+          className={`text-sm mb-3 ${priorityConfig.text}/80 cursor-text hover:bg-black/10 dark:hover:bg-white/10 p-1 -m-1 rounded min-h-[20px] whitespace-pre-wrap break-words`}
+        >
+          {task.description || <span className="text-slate-400 italic">Click to add description</span>}
+        </p>
+      )}
       
       <div className="mb-3">
         {isEditingDate ? (

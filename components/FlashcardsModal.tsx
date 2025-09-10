@@ -9,6 +9,7 @@ import { Flashcard } from '../types';
 declare global {
   interface Window {
     renderMathInElement: (element: HTMLElement, options?: any) => void;
+    katex: any;
   }
 }
 
@@ -16,10 +17,9 @@ interface FlashcardsModalProps {
   isOpen: boolean;
   onClose: () => void;
   flashcards: Flashcard[];
-  onSave?: () => void;
 }
 
-const FlashcardsModal: React.FC<FlashcardsModalProps> = ({ isOpen, onClose, flashcards, onSave }) => {
+const FlashcardsModal: React.FC<FlashcardsModalProps> = ({ isOpen, onClose, flashcards }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -33,11 +33,11 @@ const FlashcardsModal: React.FC<FlashcardsModalProps> = ({ isOpen, onClose, flas
   }, [isOpen, flashcards]);
 
   useLayoutEffect(() => {
-    // Render LaTeX whenever the current card changes using useLayoutEffect.
+    // Render LaTeX whenever the current card changes.
     // This runs synchronously after DOM updates but before the browser paints,
-    // which is ideal for DOM-mutating libraries like KaTeX to prevent flicker
-    // and ensure rendering is applied correctly.
-    if (cardRef.current && window.renderMathInElement) {
+    // which is ideal for DOM-mutating libraries like KaTeX to prevent flicker.
+    // We also check for `window.katex` to ensure the main library is loaded.
+    if (cardRef.current && window.renderMathInElement && window.katex) {
       try {
         window.renderMathInElement(cardRef.current, {
           delimiters: [
@@ -50,7 +50,7 @@ const FlashcardsModal: React.FC<FlashcardsModalProps> = ({ isOpen, onClose, flas
         console.error("KaTeX rendering failed:", error);
       }
     }
-  }, [currentIndex, flashcards]); // Rerun when card content changes
+  }, [currentIndex, flashcards, isFlipped]); // Rerun when card content changes or card is flipped
 
   if (!isOpen || flashcards.length === 0) {
     return null;
@@ -120,15 +120,6 @@ const FlashcardsModal: React.FC<FlashcardsModalProps> = ({ isOpen, onClose, flas
             Next
           </button>
         </div>
-
-        {/* Save button */}
-        {onSave && (
-          <div className="w-full pt-4 border-t border-jam-border dark:border-slate-700">
-            <button onClick={onSave} className="w-full px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700">
-              Save as Task
-            </button>
-          </div>
-        )}
       </div>
     </Modal>
   );

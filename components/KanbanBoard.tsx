@@ -9,6 +9,7 @@ interface KanbanBoardProps {
   onDeleteTask: (taskId: string) => void;
   onAddSubtask: (taskId: string, subtaskText: string) => void;
   onToggleSubtask: (taskId: string, subtaskId: string) => void;
+  onUpdateTask: (taskId: string, updates: Partial<Task>) => void;
   onUpdateTaskTime: (taskId: string, newTime: number) => void;
   onUpdateTaskPriority: (taskId: string, newPriority: Priority) => void;
   onUpdateTaskDueDate: (taskId: string, newDueDate: string) => void;
