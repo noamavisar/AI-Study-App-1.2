@@ -34,7 +34,7 @@ export interface Flashcard {
 
 export interface FlashcardDeck {
   id: string;
-  topic: string;
+  name: string;
   flashcards: Flashcard[];
   createdAt: string;
 }

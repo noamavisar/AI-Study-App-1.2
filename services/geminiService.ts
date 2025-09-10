@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
 import { Task, ResourceType, Flashcard, ProjectFile } from '../types';
 
@@ -73,7 +72,11 @@ IMPORTANT: Respond with ONLY a JSON object in the specified format. Do not inclu
         },
     });
 
-    const jsonString = response.text.trim();
+    const text = response.text;
+    if (!text) {
+        throw new Error("The AI returned an empty response. This might be due to content restrictions or a network issue. Please try again.");
+    }
+    const jsonString = text.trim();
     const parsed = JSON.parse(jsonString);
     return parsed;
 }
@@ -132,7 +135,11 @@ Respond with ONLY a JSON array of objects in the specified format. Do not includ
         },
     });
 
-    const jsonString = response.text.trim();
+    const text = response.text;
+    if (!text) {
+        throw new Error("The AI returned an empty response. This might be due to content restrictions or a network issue. Please try again.");
+    }
+    const jsonString = text.trim();
     const parsed = JSON.parse(jsonString);
     return parsed as Flashcard[];
 }
@@ -157,7 +164,11 @@ Do not include any other text, markdown, or explanation.`;
         },
     });
 
-    const jsonString = response.text.trim();
+    const text = response.text;
+    if (!text) {
+        throw new Error("The AI returned an empty response. This might be due to content restrictions or a network issue. Please try again.");
+    }
+    const jsonString = text.trim();
     const parsed = JSON.parse(jsonString);
     return parsed as string[];
 }
@@ -173,5 +184,5 @@ Do not include a full HTML document structure, just the list itself.`;
         model,
         contents: prompt,
     });
-    return response.text;
+    return response.text || '';
 }

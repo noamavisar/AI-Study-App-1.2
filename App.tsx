@@ -45,15 +45,21 @@ function useLocalStorage<T>(key: string, initialValue: T): [T, React.Dispatch<Re
                       const dateB = b.dueDate ? new Date(b.dueDate + 'T00:00:00Z') : null;
                       if (dateA && !dateB) return -1;
                       if (!dateA && dateB) return 1;
-                      if (dateA && dateB) return dateA.getTime() - dateB.getTime();
+                      if (dateA && dateB) return dateA.getTime() - b.getTime();
                       return 0;
                   }).map((task: Task, index: number) => ({...task, order: index}));
               }
               
+              const flashcardDecks = (proj.flashcardDecks || []).map((deck: any) => ({
+                ...deck,
+                name: deck.name || deck.topic, // Migrate from topic to name
+              }));
+
+
               return {
                   ...createDefaultProject(), // ensure all keys exist
                   ...proj,
-                  flashcardDecks: proj.flashcardDecks || [], // Hydrate flashcard decks
+                  flashcardDecks,
                   tasks: newTasks,
                   files: proj.files?.map((f: any) => {
                       const { dataUrl, ...rest } = f; // Remove obsolete dataUrl
@@ -449,7 +455,7 @@ const App: React.FC = () => {
         const flashcards = await generateFlashcards(topic, files, linkFiles);
         const newDeck: FlashcardDeck = {
           id: uuidv4(),
-          topic: topic,
+          name: `Flashcards Deck ${activeProject.flashcardDecks.length + 1}`,
           flashcards: flashcards,
           createdAt: new Date().toISOString(),
         };
@@ -472,7 +478,33 @@ const App: React.FC = () => {
   
   const handleDeleteFlashcardDeck = (deckId: string) => {
     if (!activeProject) return;
-    const newDecks = activeProject.flashcardDecks.filter(deck => deck.id !== deckId);
+
+    const deckToDelete = activeProject.flashcardDecks.find(deck => deck.id === deckId);
+    if (!deckToDelete) return;
+
+    const confirmDelete = () => {
+        setProjects(prevProjects => 
+            prevProjects.map(p => {
+                if (p.id === activeProjectId) {
+                    return { ...p, flashcardDecks: p.flashcardDecks.filter(d => d.id !== deckId) };
+                }
+                return p;
+            })
+        );
+    };
+
+    setConfirmation({
+      title: "Delete Flashcard Deck",
+      message: `Are you sure you want to delete the deck "${deckToDelete.name}"? This cannot be undone.`,
+      onConfirm: confirmDelete,
+    });
+  };
+
+  const handleUpdateFlashcardDeckName = (deckId: string, newName: string) => {
+    if (!activeProject) return;
+    const newDecks = activeProject.flashcardDecks.map(deck => 
+      deck.id === deckId ? { ...deck, name: newName } : deck
+    );
     updateProject(activeProject.id, { flashcardDecks: newDecks });
   };
 
@@ -628,6 +660,7 @@ const App: React.FC = () => {
                   decks={activeProject.flashcardDecks}
                   onStudyDeck={(deck) => handleStudyFlashcards(deck.flashcards)}
                   onDeleteDeck={handleDeleteFlashcardDeck}
+                  onUpdateDeckName={handleUpdateFlashcardDeckName}
                 />
                 <BrainDump 
                     notes={activeProject.brainDumpNotes}
