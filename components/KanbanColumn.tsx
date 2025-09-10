@@ -62,34 +62,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({ status, tasks, ...props }) 
     dateColorMap.set(date, SHARED_DATE_COLORS[index % SHARED_DATE_COLORS.length]);
   });
 
-  const sortedTasks = [...tasks].sort((a, b) => {
-    const hasDayA = a.day != null;
-    const hasDayB = b.day != null;
-
-    // Sprint tasks (with 'day') are sorted first by their day number.
-    if (hasDayA && !hasDayB) return -1;
-    if (!hasDayA && hasDayB) return 1;
-    if (hasDayA && hasDayB) {
-      return a.day! - b.day!;
-    }
-
-    // For regular tasks, sort by due date.
-    // The 'Z' ensures dates are parsed as UTC, avoiding timezone-related sorting errors.
-    const dateA = a.dueDate ? new Date(a.dueDate + 'T00:00:00Z') : null;
-    const dateB = b.dueDate ? new Date(b.dueDate + 'T00:00:00Z') : null;
-
-    // Tasks without a due date are sorted to the bottom.
-    if (dateA && !dateB) return -1;
-    if (!dateA && dateB) return 1;
-    
-    // If both have dates, sort chronologically.
-    if (dateA && dateB) {
-      return dateA.getTime() - dateB.getTime();
-    }
-
-    // If neither have a day or a date, maintain their original relative order.
-    return 0;
-  });
+  const sortedTasks = [...tasks].sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity));
 
   return (
     <div className={`rounded-lg p-4 ${statusConfig.bg} h-full`}>

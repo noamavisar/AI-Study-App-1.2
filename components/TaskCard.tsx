@@ -140,6 +140,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onDeleteTask, onAddSubtask, o
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       className={cardClasses}
+      data-task-id={task.id}
     >
       <div className="flex justify-between items-start">
         <div>

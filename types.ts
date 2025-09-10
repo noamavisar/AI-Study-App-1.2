@@ -57,6 +57,7 @@ export interface Task {
   flashcards?: Flashcard[];
   day?: number; // For AI-generated sprint tasks
   dueDate?: string; // YYYY-MM-DD format
+  order?: number; // For manual sorting
 }
 
 export interface Project {

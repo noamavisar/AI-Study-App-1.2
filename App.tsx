@@ -29,14 +29,36 @@ function useLocalStorage<T>(key: string, initialValue: T): [T, React.Dispatch<Re
       const parsedItem = item ? JSON.parse(item) : initialValue;
       // Data hydration for older versions
       if (key === 'projects' && Array.isArray(parsedItem)) {
-          return parsedItem.map((proj: any) => ({
-              ...createDefaultProject(), // ensure all keys exist
-              ...proj,
-              files: proj.files?.map((f: any) => {
-                  const { dataUrl, ...rest } = f; // Remove obsolete dataUrl
-                  return rest;
-              }) || [],
-          })) as T;
+          return parsedItem.map((proj: any) => {
+              const needsOrderMigration = proj.tasks && proj.tasks.length > 0 && proj.tasks.some((t: any) => t.order === undefined);
+              let newTasks = proj.tasks || [];
+
+              if (needsOrderMigration) {
+                  newTasks = [...newTasks].sort((a, b) => {
+                      const hasDayA = a.day != null;
+                      const hasDayB = b.day != null;
+                      if (hasDayA && !hasDayB) return -1;
+                      if (!hasDayA && hasDayB) return 1;
+                      if (hasDayA && hasDayB) return a.day! - b.day!;
+                      const dateA = a.dueDate ? new Date(a.dueDate + 'T00:00:00Z') : null;
+                      const dateB = b.dueDate ? new Date(b.dueDate + 'T00:00:00Z') : null;
+                      if (dateA && !dateB) return -1;
+                      if (!dateA && dateB) return 1;
+                      if (dateA && dateB) return dateA.getTime() - dateB.getTime();
+                      return 0;
+                  }).map((task: Task, index: number) => ({...task, order: index}));
+              }
+              
+              return {
+                  ...createDefaultProject(), // ensure all keys exist
+                  ...proj,
+                  tasks: newTasks,
+                  files: proj.files?.map((f: any) => {
+                      const { dataUrl, ...rest } = f; // Remove obsolete dataUrl
+                      return rest;
+                  }) || [],
+              }
+          }) as T;
       }
       return parsedItem;
     } catch (error) {
@@ -230,17 +252,49 @@ const App: React.FC = () => {
       ...taskData,
       id: uuidv4(),
       status: TaskStatus.ToDo,
+      order: Date.now(),
     };
     updateProject(activeProject.id, { tasks: [...activeProject.tasks, newTask] });
     setIsAddTaskModalOpen(false);
   };
 
-  const handleUpdateTaskStatus = (taskId: string, newStatus: TaskStatus) => {
+  const handleTaskDrop = (draggedTaskId: string, targetTaskId: string | null, newStatus: TaskStatus) => {
     if (!activeProject) return;
-    const newTasks = activeProject.tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t);
+
+    const tasks = [...activeProject.tasks];
+    const draggedTask = tasks.find(t => t.id === draggedTaskId);
+    if (!draggedTask) return;
+
+    const columnTasks = tasks
+        .filter(t => t.status === newStatus && t.id !== draggedTaskId)
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+    let newOrder: number;
+
+    if (!targetTaskId) {
+        const lastTask = columnTasks[columnTasks.length - 1];
+        newOrder = lastTask ? (lastTask.order ?? 0) + 1000 : Date.now();
+    } else {
+        const targetTask = tasks.find(t => t.id === targetTaskId);
+        if (!targetTask || targetTask.order === undefined) {
+            newOrder = Date.now();
+        } else {
+            const tasksBefore = columnTasks.filter(t => (t.order ?? 0) < (targetTask.order ?? 0));
+            if (tasksBefore.length === 0) {
+                newOrder = (targetTask.order ?? 0) - 1000;
+            } else {
+                const prevTask = tasksBefore[tasksBefore.length - 1];
+                newOrder = ((prevTask.order ?? 0) + (targetTask.order ?? 0)) / 2;
+            }
+        }
+    }
+    
+    const newTasks = tasks.map(t => 
+        t.id === draggedTaskId ? { ...t, status: newStatus, order: newOrder } : t
+    );
     updateProject(activeProject.id, { tasks: newTasks });
   };
-  
+
   const handleDeleteTask = (taskId: string) => {
     if (!activeProjectId) return;
 
@@ -374,6 +428,7 @@ const App: React.FC = () => {
             status: TaskStatus.ToDo,
             priority: Priority.ImportantNotUrgent,
             estimatedTime: 120, // Default time
+            order: Date.now() + (sprintTask.day || 0), // Ensure order respects day
         }));
         updateProject(activeProject.id, { tasks: [...activeProject.tasks, ...newTasks] });
         setIsSprintGeneratorOpen(false);
@@ -429,6 +484,7 @@ const App: React.FC = () => {
     const newTasks: Task[] = importedTasks.map(task => ({
         ...task,
         id: uuidv4(),
+        order: Date.now(),
     }));
     updateProject(activeProject.id, { tasks: [...activeProject.tasks, ...newTasks] });
     setIsImportModalOpen(false);
@@ -550,7 +606,7 @@ const App: React.FC = () => {
             <div className="lg:col-span-2">
                 <KanbanBoard
                     tasks={activeProject.tasks}
-                    onUpdateTaskStatus={handleUpdateTaskStatus}
+                    onTaskDrop={handleTaskDrop}
                     onDeleteTask={handleDeleteTask}
                     onAddSubtask={handleAddSubtask}
                     onToggleSubtask={handleToggleSubtask}

@@ -5,7 +5,7 @@ import { TASK_STATUSES } from '../constants';
 
 interface KanbanBoardProps {
   tasks: Task[];
-  onUpdateTaskStatus: (taskId: string, newStatus: TaskStatus) => void;
+  onTaskDrop: (draggedTaskId: string, targetTaskId: string | null, newStatus: TaskStatus) => void;
   onDeleteTask: (taskId: string) => void;
   onAddSubtask: (taskId: string, subtaskText: string) => void;
   onToggleSubtask: (taskId: string, subtaskId: string) => void;
@@ -20,10 +20,15 @@ const KanbanBoard: React.FC<KanbanBoardProps> = (props) => {
     const handleDrop = (e: React.DragEvent<HTMLDivElement>, newStatus: TaskStatus) => {
         e.preventDefault();
         const taskId = e.dataTransfer.getData("taskId");
-        const sourceStatus = e.dataTransfer.getData("sourceStatus");
-        if (taskId && sourceStatus !== newStatus) {
-            props.onUpdateTaskStatus(taskId, newStatus);
+        
+        // Find the card being dropped ON, if any
+        const targetCard = (e.target as HTMLElement).closest('[data-task-id]');
+        const targetTaskId = targetCard ? targetCard.getAttribute('data-task-id') : null;
+
+        if (taskId && taskId !== targetTaskId) {
+            props.onTaskDrop(taskId, targetTaskId, newStatus);
         }
+
         e.currentTarget.classList.remove('border-jam-blue', 'dark:border-pink-500', 'bg-slate-100', 'dark:bg-slate-900/50');
     };
 
@@ -36,7 +41,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = (props) => {
         e.currentTarget.classList.remove('border-jam-blue', 'dark:border-pink-500', 'bg-slate-100', 'dark:bg-slate-900/50');
     };
 
-    const { tasks, onUpdateTaskStatus, ...cardProps } = props;
+    const { tasks, onTaskDrop, ...cardProps } = props;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
