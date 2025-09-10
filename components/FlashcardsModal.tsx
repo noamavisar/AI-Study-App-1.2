@@ -4,8 +4,7 @@ import { Flashcard } from '../types';
 
 declare global {
   interface Window {
-    katex: any;
-    renderMathInElement: (element: HTMLElement, options?: any) => void;
+    MathJax: any;
   }
 }
 
@@ -17,17 +16,19 @@ interface FlashcardsModalProps {
   isRendering: boolean;
 }
 
-// Helper to wait for KaTeX to be loaded, preventing race conditions.
-function ensureKatexIsLoaded(timeout = 7000): Promise<void> {
+// Helper to wait for MathJax to be loaded and ready.
+function ensureMathJaxIsReady(timeout = 7000): Promise<void> {
   return new Promise((resolve, reject) => {
     const startTime = Date.now();
     const interval = setInterval(() => {
-      if (window.katex && window.renderMathInElement) {
-        clearInterval(interval);
-        resolve();
+      if (window.MathJax && window.MathJax.startup?.promise) {
+        window.MathJax.startup.promise.then(() => {
+          clearInterval(interval);
+          resolve();
+        });
       } else if (Date.now() - startTime > timeout) {
         clearInterval(interval);
-        reject(new Error("KaTeX failed to load in time for rendering."));
+        reject(new Error("MathJax failed to load in time for rendering."));
       }
     }, 100);
   });
@@ -37,7 +38,8 @@ function ensureKatexIsLoaded(timeout = 7000): Promise<void> {
 const FlashcardsModal: React.FC<FlashcardsModalProps> = ({ isOpen, onClose, flashcards, onForceRender, isRendering }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
-  const cardContentRef = useRef<HTMLDivElement>(null);
+  const frontContentRef = useRef<HTMLDivElement>(null);
+  const backContentRef = useRef<HTMLDivElement>(null);
 
   // When the modal opens or flashcards change, reset to the first card
   useEffect(() => {
@@ -47,37 +49,32 @@ const FlashcardsModal: React.FC<FlashcardsModalProps> = ({ isOpen, onClose, flas
     }
   }, [isOpen, flashcards]);
   
-  // When the card content changes, re-render the math
+  // When the card content changes, re-render the math for both faces
   useEffect(() => {
     const renderMath = async () => {
         try {
-            await ensureKatexIsLoaded();
-            if (cardContentRef.current) {
-                window.renderMathInElement(cardContentRef.current, {
-                    delimiters: [
-                        {left: '$$', right: '$$', display: true},
-                        {left: '$', right: '$', display: false},
-                    ],
-                    throwOnError: false,
-                    strict: false,
-                });
+            await ensureMathJaxIsReady();
+            if (frontContentRef.current && backContentRef.current && flashcards.length > 0) {
+                // Set the raw HTML content for both sides
+                frontContentRef.current.innerHTML = flashcards[currentIndex].question;
+                backContentRef.current.innerHTML = flashcards[currentIndex].answer;
+                // Ask MathJax to typeset both elements
+                window.MathJax.typesetPromise([frontContentRef.current, backContentRef.current]);
             }
         } catch (error) {
-            console.error("KaTeX rendering failed:", error);
+            console.error("MathJax rendering failed:", error);
         }
     };
 
-    if (isOpen) {
+    if (isOpen && flashcards.length > 0) {
         renderMath();
     }
-  }, [currentIndex, isFlipped, flashcards, isOpen]);
+  }, [currentIndex, flashcards, isOpen]);
 
 
   if (!isOpen || flashcards.length === 0) {
     return null;
   }
-
-  const currentCard = flashcards[currentIndex];
   
   const handleNext = () => {
     setIsFlipped(false);
@@ -94,18 +91,6 @@ const FlashcardsModal: React.FC<FlashcardsModalProps> = ({ isOpen, onClose, flas
     }, 150);
   };
 
-  const CardFace = ({ content, isBackFace }: { content: string, isBackFace?: boolean }) => {
-    return (
-      <div 
-        ref={cardContentRef}
-        className={`absolute w-full h-full p-6 flex items-center justify-center text-center [backface-visibility:hidden] overflow-y-auto ${ isBackFace ? 'bg-slate-100 dark:bg-slate-900 [transform:rotateY(180deg)]' : 'bg-white dark:bg-slate-700' } border border-jam-border dark:border-slate-600 rounded-lg`}
-      >
-        <div dir="auto" className="prose prose-lg dark:prose-invert max-w-none break-words w-full text-left" dangerouslySetInnerHTML={{ __html: content }}>
-        </div>
-      </div>
-    );
-  };
-
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Study Flashcards">
       <div className="flex flex-col items-center space-y-4">
@@ -115,8 +100,14 @@ const FlashcardsModal: React.FC<FlashcardsModalProps> = ({ isOpen, onClose, flas
               isFlipped ? '[transform:rotateY(180deg)]' : ''
             }`}
           >
-            <CardFace content={currentCard.question} />
-            <CardFace content={currentCard.answer} isBackFace />
+            {/* Front Face */}
+            <div className="absolute w-full h-full p-6 flex items-center justify-center text-center [backface-visibility:hidden] overflow-y-auto bg-white dark:bg-slate-700 border border-jam-border dark:border-slate-600 rounded-lg">
+              <div ref={frontContentRef} dir="auto" className="prose prose-lg dark:prose-invert max-w-none break-words w-full text-left"></div>
+            </div>
+            {/* Back Face */}
+            <div className="absolute w-full h-full p-6 flex items-center justify-center text-center [backface-visibility:hidden] overflow-y-auto bg-slate-100 dark:bg-slate-900 [transform:rotateY(180deg)] border border-jam-border dark:border-slate-600 rounded-lg">
+              <div ref={backContentRef} dir="auto" className="prose prose-lg dark:prose-invert max-w-none break-words w-full text-left"></div>
+            </div>
           </div>
         </div>
         
