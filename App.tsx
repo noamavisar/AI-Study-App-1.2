@@ -155,7 +155,6 @@ const App: React.FC = () => {
   const [aiContent, setAiContent] = useState<string | string[] | null>(null);
 
   // Flashcards state
-  const [currentFlashcards, setCurrentFlashcards] = useState<Flashcard[]>([]);
   const [studyingDeckId, setStudyingDeckId] = useState<string | null>(null);
   const [isLatexRendering, setIsLatexRendering] = useState(false);
 
@@ -456,7 +455,6 @@ const App: React.FC = () => {
               }));
               setIsFlashcardGeneratorOpen(false);
               // Open the study modal for the newly created deck
-              setCurrentFlashcards(newDeck.flashcards);
               setStudyingDeckId(newDeck.id);
               setIsFlashcardsModalOpen(true);
           } else {
@@ -470,7 +468,6 @@ const App: React.FC = () => {
   };
 
   const handleOpenFlashcardsModal = (deck: FlashcardDeck) => {
-    setCurrentFlashcards(deck.flashcards);
     setStudyingDeckId(deck.id);
     setIsFlashcardsModalOpen(true);
   };
@@ -490,10 +487,12 @@ const App: React.FC = () => {
   };
 
   const handleForceRenderFlashcards = async () => {
+    const deckToCorrect = activeProject?.flashcardDecks.find(d => d.id === studyingDeckId);
+    if (!deckToCorrect) return;
+
     setIsLatexRendering(true);
     try {
-        const correctedCards = await verifyAndCorrectFlashcards(currentFlashcards);
-        setCurrentFlashcards(correctedCards);
+        const correctedCards = await verifyAndCorrectFlashcards(deckToCorrect.flashcards);
         if (studyingDeckId) {
              updateActiveProject(proj => ({
                 ...proj,
@@ -603,6 +602,8 @@ const App: React.FC = () => {
       </div>
     );
   }
+  
+  const studyingDeck = activeProject.flashcardDecks.find(d => d.id === studyingDeckId);
 
   return (
     <div className="min-h-screen bg-jam-yellow-light dark:bg-slate-900">
@@ -691,11 +692,11 @@ const App: React.FC = () => {
             projectFiles={activeProject.files}
         />
       )}
-      {isFlashcardsModalOpen && (
+      {isFlashcardsModalOpen && studyingDeck && (
         <FlashcardsModal
           isOpen={isFlashcardsModalOpen}
           onClose={() => setIsFlashcardsModalOpen(false)}
-          flashcards={currentFlashcards}
+          flashcards={studyingDeck.flashcards}
           onForceRender={handleForceRenderFlashcards}
           isRendering={isLatexRendering}
           studyingDeckId={studyingDeckId}

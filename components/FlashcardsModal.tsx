@@ -57,6 +57,15 @@ const FlashcardsModal: React.FC<FlashcardsModalProps> = ({ isOpen, onClose, flas
     return cardsWithOriginalIndex.filter(card => card.reviewStatus === reviewFilter);
   }, [flashcards, reviewFilter]);
 
+  // FIX: This hook safely handles cases where the filtered list shrinks.
+  // If the user is on the last card and it's removed, this prevents an
+  // out-of-bounds error by moving the index to the new last card.
+  useEffect(() => {
+    if (filteredFlashcards.length > 0 && currentIndex >= filteredFlashcards.length) {
+        setCurrentIndex(filteredFlashcards.length - 1);
+    }
+  }, [filteredFlashcards, currentIndex]);
+
   useEffect(() => {
     setCurrentIndex(0);
     setIsFlipped(false);
@@ -68,7 +77,7 @@ const FlashcardsModal: React.FC<FlashcardsModalProps> = ({ isOpen, onClose, flas
       setIsFlipped(false);
       setReviewFilter('All');
     }
-  }, [isOpen, flashcards]);
+  }, [isOpen]);
   
   useEffect(() => {
     const renderMath = async () => {
@@ -83,13 +92,10 @@ const FlashcardsModal: React.FC<FlashcardsModalProps> = ({ isOpen, onClose, flas
             }
 
             const sanitize = (text: string) => {
-                // This function was incorrectly converting display math ('$$') to inline math ('$').
-                // The new version only cleans up potential stray HTML tags and normalizes whitespace
-                // without altering the MathJax delimiters.
                 return text
-                  .replace(/<\/?p>|<br\s*\/?>/g, ' ') // Remove <p> and <br> tags
-                  .replace(/\n/g, ' ') // Replace newlines with spaces
-                  .replace(/\s\s+/g, ' ') // Collapse multiple spaces
+                  .replace(/<\/?p>|<br\s*\/?>/g, ' ')
+                  .replace(/\n/g, ' ')
+                  .replace(/\s\s+/g, ' ')
                   .trim();
             };
 
@@ -112,6 +118,7 @@ const FlashcardsModal: React.FC<FlashcardsModalProps> = ({ isOpen, onClose, flas
   }
   
   const handleNext = () => {
+    if (filteredFlashcards.length === 0) return;
     setIsFlipped(false);
     setTimeout(() => {
        setCurrentIndex(prev => (prev + 1) % filteredFlashcards.length);
@@ -119,16 +126,30 @@ const FlashcardsModal: React.FC<FlashcardsModalProps> = ({ isOpen, onClose, flas
   };
 
   const handlePrev = () => {
+    if (filteredFlashcards.length === 0) return;
     setIsFlipped(false);
     setTimeout(() => {
         setCurrentIndex(prev => (prev - 1 + filteredFlashcards.length) % filteredFlashcards.length);
     }, 150);
   };
   
-  const handleMarkAs = (status: FlashcardReviewStatus) => {
+  // FIX: A new, robust handler for the 'Good' and 'Again' buttons.
+  const handleReviewAction = (status: FlashcardReviewStatus) => {
     const currentCard = filteredFlashcards[currentIndex];
     if (studyingDeckId && currentCard) {
-        onUpdateFlashcardStatus(studyingDeckId, currentCard.originalIndex, status);
+      // This is the action that will trigger the prop change.
+      onUpdateFlashcardStatus(studyingDeckId, currentCard.originalIndex, status);
+  
+      // If we are viewing "All Cards", the card status changes but it doesn't leave the view.
+      // So, we must manually advance to the next card.
+      if (reviewFilter === 'All') {
+        handleNext();
+      } else {
+        // When in a filtered view, the card's removal from the list IS the "next" action.
+        // We just prepare the UI for it by un-flipping the card. The `useEffect` hook above
+        // handles the edge case of removing the last card.
+        setIsFlipped(false);
+      }
     }
   };
 
@@ -171,7 +192,7 @@ const FlashcardsModal: React.FC<FlashcardsModalProps> = ({ isOpen, onClose, flas
           </button>
         </div>
 
-        {filteredFlashcards.length > 0 ? (
+        {filteredFlashcards.length > 0 && currentCard ? (
             <>
                 <div className="w-full h-80 [perspective:1200px]" onClick={() => setIsFlipped(f => !f)}>
                 <div
@@ -210,13 +231,13 @@ const FlashcardsModal: React.FC<FlashcardsModalProps> = ({ isOpen, onClose, flas
                       <p className="text-center text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">How well did you know this?</p>
                       <div className="flex items-center justify-center w-full space-x-3">
                           <button
-                              onClick={(e) => { e.stopPropagation(); handleMarkAs(FlashcardReviewStatus.NeedsReview); handleNext(); }}
+                              onClick={(e) => { e.stopPropagation(); handleReviewAction(FlashcardReviewStatus.NeedsReview); }}
                               className="flex-1 px-4 py-2 text-sm font-semibold rounded-lg bg-yellow-100 text-yellow-800 hover:bg-yellow-200 dark:bg-yellow-900/50 dark:text-yellow-200 dark:hover:bg-yellow-900"
                           >
                               Again
                           </button>
                           <button
-                              onClick={(e) => { e.stopPropagation(); handleMarkAs(FlashcardReviewStatus.Learned); handleNext(); }}
+                              onClick={(e) => { e.stopPropagation(); handleReviewAction(FlashcardReviewStatus.Learned); }}
                               className="flex-1 px-4 py-2 text-sm font-semibold rounded-lg bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-900/50 dark:text-green-200 dark:hover:bg-green-900"
                           >
                               Good
