@@ -62,10 +62,20 @@ function useLocalStorage<T>(key: string, initialValue: T): [T, React.Dispatch<Re
                 })),
               }));
 
+              // Timer settings migration from longBreak to exam
+              let timerSettings = proj.timerSettings || DEFAULT_TIMER_SETTINGS;
+              if (timerSettings.longBreak !== undefined) {
+                  timerSettings.exam = 180; // Add new exam setting with default
+                  delete timerSettings.longBreak; // Remove old setting
+              }
+              if (timerSettings.exam === undefined) {
+                  timerSettings.exam = 180;
+              }
 
               return {
                   ...createDefaultProject(), // ensure all keys exist
                   ...proj,
+                  timerSettings,
                   flashcardDecks,
                   tasks: newTasks,
                   files: proj.files?.map((f: any) => {
@@ -101,7 +111,7 @@ function useLocalStorage<T>(key: string, initialValue: T): [T, React.Dispatch<Re
 const DEFAULT_TIMER_SETTINGS: TimerSettings = {
   pomodoro: 25,
   shortBreak: 5,
-  longBreak: 15,
+  exam: 180,
 };
 
 const createDefaultProject = (): Project => ({

@@ -83,12 +83,14 @@ const FlashcardsModal: React.FC<FlashcardsModalProps> = ({ isOpen, onClose, flas
             }
 
             const sanitize = (text: string) => {
-                let sanitizedText = text.replace(/\\\[/g, '\\(').replace(/\\\]/g, '\\)').replace(/\$\$/g, '$');
-                sanitizedText = sanitizedText
-                  .replace(/<\/?p>|<br\s*\/?>|\n/g, ' ')
-                  .replace(/\s\s+/g, ' ')
+                // This function was incorrectly converting display math ('$$') to inline math ('$').
+                // The new version only cleans up potential stray HTML tags and normalizes whitespace
+                // without altering the MathJax delimiters.
+                return text
+                  .replace(/<\/?p>|<br\s*\/?>/g, ' ') // Remove <p> and <br> tags
+                  .replace(/\n/g, ' ') // Replace newlines with spaces
+                  .replace(/\s\s+/g, ' ') // Collapse multiple spaces
                   .trim();
-                return sanitizedText;
             };
 
             frontContentRef.current.innerHTML = sanitize(currentCard.question);

@@ -115,6 +115,7 @@ export async function generateFlashcards(topic: string, files: File[], linkFiles
         - All mathematical notation MUST use LaTeX.
         - All text outside of LaTeX delimiters must be in HEBREW.
         - All LaTeX commands inside delimiters MUST remain in English (e.g., $\\mathbb{R}$ not $\\ממשי{R}$).
+        - **ABSOLUTELY NO HEBREW characters are allowed between the $...$ or $$...$$ delimiters.**
         - Use INLINE math for formulas within a sentence. Delimit with single dollar signs: $...$.
           - Correct example: "הנגזרת של $x^2$ היא $2x$."
         - Use DISPLAY math for important formulas that should stand alone on their own line. Delimit with double dollar signs: $$...$$.
@@ -209,15 +210,17 @@ export async function generatePromptSuggestions(files: File[], linkFiles: Projec
 
 const correctLatex = async (brokenExpression: string): Promise<string> => {
     const prompt = `
-        The following LaTeX expression failed to render in MathJax, likely due to an invalid command or syntax:
-        \`${brokenExpression}\`
+        The following text, which was extracted from between LaTeX delimiters ($...$ or $$...$$), failed to render in MathJax. It likely contains invalid syntax or non-LaTeX text.
+        Broken expression: \`${brokenExpression}\`
         
-        Your task is to correct ONLY the LaTeX syntax to make it compatible with MathJax.
-        - For example, if you see "langle", it should be "\\langle".
-        - The expression is from a text in Hebrew, but the LaTeX commands themselves are standard English (e.g., \\frac, \\sum).
-        - Return ONLY the corrected LaTeX code.
-        - Do NOT include delimiters like $ or $$.
-        - Do NOT include any explanations or surrounding text.
+        Your task is to fix it. Follow these rules:
+        1.  Identify and correct any invalid LaTeX commands or syntax. For example, "langle" should be "\\langle".
+        2.  **Crucially, remove any and all Hebrew words or characters from the expression.** The output should contain ONLY valid LaTeX commands, numbers, English variable names, and mathematical symbols.
+        3.  Return ONLY the corrected LaTeX code.
+        4.  Do NOT include delimiters like $ or $$.
+        5.  Do NOT include any explanations or surrounding text.
+
+        Example: If the input is "הגדרה של \\frac{1}{2}", the output should be "\\frac{1}{2}".
     `;
 
     const response = await ai.models.generateContent({
@@ -234,14 +237,43 @@ const correctLatex = async (brokenExpression: string): Promise<string> => {
 };
 
 async function processTextForCorrection(text: string): Promise<string> {
-    const regex = /(\$\$[\s\S]+?\$\$|\$[\s\S]+?\$)/g;
+    const regex = /(\$\$[\s\S]+?\$\$|\$[\s\S]+?\$|\\\([\s\S]+?\\\)|\\\[[\s\S]+?\\\])/g;
     const parts = text.split(regex);
     const processedParts = [];
 
     for (const part of parts) {
-        if (part.startsWith('$') && part.endsWith('$')) {
-            const isDisplay = part.startsWith('$$');
-            const rawExpression = part.slice(isDisplay ? 2 : 1, isDisplay ? -2 : -1).trim();
+        if (!part) continue;
+
+        let isMath = false;
+        let isDisplay = false;
+        let startDelim = '';
+        let endDelim = '';
+        
+        if (part.startsWith('$$') && part.endsWith('$$')) {
+            isMath = true;
+            isDisplay = true;
+            startDelim = '$$';
+            endDelim = '$$';
+        } else if (part.startsWith('$') && part.endsWith('$')) {
+            isMath = true;
+            isDisplay = false;
+            startDelim = '$';
+            endDelim = '$';
+        } else if (part.startsWith('\\(') && part.endsWith('\\)')) {
+            isMath = true;
+            isDisplay = false;
+            startDelim = '\\(';
+            endDelim = '\\)';
+        } else if (part.startsWith('\\[') && part.endsWith('\\]')) {
+            isMath = true;
+            isDisplay = true;
+            startDelim = '\\[';
+            endDelim = '\\]';
+        }
+
+
+        if (isMath) {
+            const rawExpression = part.slice(startDelim.length, -endDelim.length).trim();
 
             if (!rawExpression) {
                 processedParts.push(part);
@@ -256,8 +288,7 @@ async function processTextForCorrection(text: string): Promise<string> {
                 console.warn('Broken LaTeX found, attempting to correct:', rawExpression);
                 try {
                     const correctedRaw = await correctLatex(rawExpression);
-                    const delimiter = isDisplay ? '$$' : '$';
-                    const correctedPart = `${delimiter}${correctedRaw}${delimiter}`;
+                    const correctedPart = `${startDelim}${correctedRaw}${endDelim}`;
                     
                     try {
                         // Test the correction
@@ -313,7 +344,7 @@ export async function verifyAndCorrectFlashcards(flashcards: Flashcard[]): Promi
         flashcards.map(async (card) => {
             const correctedQuestion = await processTextForCorrection(card.question);
             const correctedAnswer = await processTextForCorrection(card.answer);
-            return { question: correctedQuestion, answer: correctedAnswer };
+            return { question: correctedQuestion, answer: correctedAnswer, reviewStatus: card.reviewStatus };
         })
     );
     
