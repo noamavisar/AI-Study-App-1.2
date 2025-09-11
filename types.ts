@@ -59,7 +59,9 @@ export interface ProjectFile {
 export interface TimerSettings {
     pomodoro: number;
     shortBreak: number;
+    longBreak?: number; // Kept for migration purposes
     exam: number;
+    promptForRitual?: boolean;
 }
 
 export interface Task {
